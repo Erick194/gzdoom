@@ -1,11 +1,17 @@
 #include <SDL.h>
 
 #include "doomdef.h"
+#include "version.h"
 #include "templates.h"
 #include "m_joy.h"
 
 // Very small deadzone so that floating point magic doesn't happen
 #define MIN_DEADZONE 0.000001f
+
+CUSTOM_CVAR(Bool, joy_background, true, CVAR_GLOBALCONFIG|CVAR_ARCHIVE|CVAR_NOINITCALL)
+{
+	Printf("This won't take effect until " GAMENAME " is restarted.\n");
+}
 
 class SDLInputJoystick: public IJoystickConfig
 {
@@ -266,6 +272,8 @@ static SDLInputJoystickManager *JoystickManager;
 
 void I_StartupJoysticks()
 {
+	if (joy_background)
+		SDL_SetHint("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1");
 	if(SDL_InitSubSystem(SDL_INIT_JOYSTICK) >= 0)
 		JoystickManager = new SDLInputJoystickManager();
 }

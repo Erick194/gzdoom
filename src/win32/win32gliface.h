@@ -117,6 +117,8 @@ public:
 	void SwapBuffers();
 	void NewRefreshRate ();
 
+	int GetClientWidth();
+	int GetClientHeight();
 
 	int GetTrueHeight() { return static_cast<Win32GLVideo *>(Video)->GetTrueHeight(); }
 

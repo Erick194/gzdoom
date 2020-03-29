@@ -923,7 +923,6 @@ static void DoPrintStr(const char *cp, HWND edit, HANDLE StdOut)
 		return;
 
 	char buf[256];
-	wchar_t wbuf[countof(buf)];
 	int bpos = 0;
 	CHARRANGE selection;
 	CHARRANGE endselection;

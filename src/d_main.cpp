@@ -205,6 +205,9 @@ CUSTOM_CVAR (String, vid_cursor, "None", CVAR_ARCHIVE | CVAR_NOINITCALL)
 	}
 }
 
+CVAR (Bool, autoloadbrightmaps, true, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
+CVAR (Bool, autoloadlights, true, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
+
 bool wantToRestart;
 bool DrawFSHUD;				// [RH] Draw fullscreen HUD?
 TArray<FString> allwads;
@@ -2042,6 +2045,22 @@ static void AddAutoloadFiles(const char *autoname)
 {
 	LumpFilterIWAD.Format("%s.", autoname);	// The '.' is appened to simplify parsing the string 
 
+	if (!(gameinfo.flags & GI_SHAREWARE))
+	{
+		if (autoloadlights)
+		{
+			const char *lwad = BaseFileSearch ("lights.pk3", NULL);
+			if (lwad)
+				D_AddFile (allwads, lwad);
+		}
+		if (autoloadbrightmaps)
+		{
+			const char *bmwad = BaseFileSearch ("brightmaps.pk3", NULL);
+			if (bmwad)
+				D_AddFile (allwads, bmwad);
+		}
+	}
+
 	if (!(gameinfo.flags & GI_SHAREWARE) && !Args->CheckParm("-noautoload"))
 	{
 		FString file;
@@ -2052,13 +2071,6 @@ static void AddAutoloadFiles(const char *autoname)
 		// And I probably never will now. But I know at least one person uses
 		// it for something else, so this gets to stay here.
 		const char *wad = BaseFileSearch ("zvox.wad", NULL);
-		if (wad)
-			D_AddFile (allwads, wad);
-
-		wad = BaseFileSearch ("brightmaps.pk3", NULL);
-		if (wad)
-			D_AddFile (allwads, wad);
-		wad = BaseFileSearch ("lights.pk3", NULL);
 		if (wad)
 			D_AddFile (allwads, wad);
 

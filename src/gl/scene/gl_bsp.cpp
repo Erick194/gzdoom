@@ -84,6 +84,21 @@ static void UnclipSubsector(subsector_t *sub)
 	}
 }
 
+CVAR(Float, gl_linedistancecull, 8000.0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+
+inline bool IsDistanceCulled(seg_t *line)
+{
+	double dist3 = gl_linedistancecull * gl_linedistancecull;
+	if (dist3 <= 0.0)
+		return false;
+
+	double dist1 = (line->v1->fPos() - ViewPos).LengthSquared();
+	double dist2 = (line->v2->fPos() - ViewPos).LengthSquared();
+	if ((dist1 > dist3) && (dist2 > dist3))
+		return true;
+	return false;
+}
+
 //==========================================================================
 //
 // R_AddLine
@@ -143,6 +158,15 @@ static void AddLine (seg_t *seg, bool portalclip)
 	currentsubsector->flags |= SSECF_DRAWN;
 
 	BYTE ispoly = BYTE(seg->sidedef->Flags & WALLF_POLYOBJ);
+
+	if (IsDistanceCulled(seg))
+	{
+		GLWall wall;
+		wall.sub = currentsubsector;
+		wall.Process(seg, seg->frontsector, seg->backsector, true);
+		clipper.SafeAddClipRange(startAngle, endAngle);
+		return;
+	}
 
 	if (!seg->backsector)
 	{

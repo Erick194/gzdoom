@@ -410,7 +410,7 @@ void DLoadSaveMenu::NotifyNewSave (const char *file, const char *title, bool okF
 			node->bMissingWads = false;
 			if (okForQuicksave)
 			{
-				if (quickSaveSlot == NULL) quickSaveSlot = node;
+				if (quickSaveSlot == nullptr || quickSaveSlot == (FSaveGameNode*)1) quickSaveSlot = node;
 				LastAccessed = LastSaved = i;
 			}
 			return;
@@ -426,8 +426,12 @@ void DLoadSaveMenu::NotifyNewSave (const char *file, const char *title, bool okF
 
 	if (okForQuicksave)
 	{
-		if (quickSaveSlot == NULL) quickSaveSlot = node;
+		if (quickSaveSlot == nullptr || quickSaveSlot == (FSaveGameNode*)1) quickSaveSlot = node;
 		LastAccessed = LastSaved = index;
+	}
+	else
+	{
+		LastAccessed = ++LastSaved;
 	}
 }
 

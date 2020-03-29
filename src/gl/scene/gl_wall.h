@@ -224,7 +224,7 @@ private:
 
 public:
 
-	void Process(seg_t *seg, sector_t *frontsector, sector_t *backsector);
+	void Process(seg_t *seg, sector_t *frontsector, sector_t *backsector, bool isculled = false);
 	void ProcessLowerMiniseg(seg_t *seg, sector_t *frontsector, sector_t *backsector);
 	void Draw(int pass);
 

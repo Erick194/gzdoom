@@ -589,7 +589,7 @@ CCMD (quicksave)
 	if (gamestate != GS_LEVEL)
 		return;
 		
-	if (quickSaveSlot == NULL)
+	if (quickSaveSlot == NULL || quickSaveSlot == (FSaveGameNode*)1)
 	{
 		S_Sound(CHAN_VOICE | CHAN_UI, "menu/activate", snd_menuvolume, ATTN_NONE);
 		M_StartControlPanel(false);
@@ -683,7 +683,7 @@ CCMD (quickload)
 		return;
 	}
 		
-	if (quickSaveSlot == NULL)
+	if (quickSaveSlot == NULL || quickSaveSlot == (FSaveGameNode*)1)
 	{
 		M_StartControlPanel(true);
 		// signal that whatever gets loaded should be the new quicksave

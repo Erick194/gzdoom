@@ -68,7 +68,7 @@ CCMD(gl_flush)
 	if (GLRenderer != NULL) GLRenderer->FlushTextures();
 }
 
-CUSTOM_CVAR(Int, gl_texture_filter, 6, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOINITCALL)
+CUSTOM_CVAR(Int, gl_texture_filter, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOINITCALL)
 {
 	if (self < 0 || self > 6) self=4;
 	if (GLRenderer != NULL) GLRenderer->FlushTextures();
@@ -95,8 +95,6 @@ CUSTOM_CVAR(Bool, gl_texture_usehires, true, CVAR_ARCHIVE|CVAR_NOINITCALL)
 
 CVAR(Bool, gl_precache, false, CVAR_ARCHIVE)
 CVAR(Bool, gl_clamp_per_texture, false,  CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
-
-CVAR(Bool, gl_trimsprites, true, CVAR_ARCHIVE);
 
 TexFilter_s TexFilter[]={
 	{GL_NEAREST,					GL_NEAREST,		false},

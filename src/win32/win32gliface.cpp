@@ -47,6 +47,8 @@ CUSTOM_CVAR(Int, gl_vid_multisample, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_
 	Printf("This won't take effect until " GAMENAME " is restarted.\n");
 }
 
+CVAR(Bool, vid_activeinbackground, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
 CVAR(Bool, gl_debug, false, 0)
 
 EXTERN_CVAR(Bool, vr_enable_quadbuffered)
@@ -908,7 +910,7 @@ Win32GLFrameBuffer::Win32GLFrameBuffer(void *hMonitor, int width, int height, in
 		style |= WS_POPUP;
 	else
 	{
-		style |= WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX;
+		style |= WS_OVERLAPPEDWINDOW;
 		exStyle |= WS_EX_WINDOWEDGE;
 	}
 
@@ -924,7 +926,13 @@ Win32GLFrameBuffer::Win32GLFrameBuffer(void *hMonitor, int width, int height, in
 	}
 	else
 	{
-		MoveWindow(Window, r.left, r.top, width + (GetSystemMetrics(SM_CXSIZEFRAME) * 2), height + (GetSystemMetrics(SM_CYSIZEFRAME) * 2) + GetSystemMetrics(SM_CYCAPTION), FALSE);
+		RECT windowRect;
+		windowRect.left = r.left;
+		windowRect.top = r.top;
+		windowRect.right = windowRect.left + width;
+		windowRect.bottom = windowRect.top + height;
+		AdjustWindowRectEx(&windowRect, style, FALSE, exStyle);
+		MoveWindow(Window, windowRect.left, windowRect.top, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top, FALSE);
 
 		I_RestoreWindowedPos();
 	}
@@ -988,7 +996,7 @@ void Win32GLFrameBuffer::InitializeState()
 
 bool Win32GLFrameBuffer::CanUpdate()
 {
-	if (!AppActive) return false;
+	if (!AppActive && (IsFullscreen() || !vid_activeinbackground)) return false;
 	return true;
 }
 
@@ -1109,6 +1117,19 @@ void Win32GLFrameBuffer::NewRefreshRate ()
 	}
 }
 
+int Win32GLFrameBuffer::GetClientWidth()
+{
+	RECT rect = { 0 };
+	GetClientRect(Window, &rect);
+	return rect.right - rect.left;
+}
+
+int Win32GLFrameBuffer::GetClientHeight()
+{
+	RECT rect = { 0 };
+	GetClientRect(Window, &rect);
+	return rect.bottom - rect.top;
+}
 
 IVideo *gl_CreateVideo()
 {

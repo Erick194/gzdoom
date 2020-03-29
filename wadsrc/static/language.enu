@@ -1582,7 +1582,6 @@ SKILL_EASY			= "Hey, not too rough";
 SKILL_NORMAL		= "Hurt me plenty";
 SKILL_HARD			= "Ultra-Violence";
 SKILL_NIGHTMARE		= "NIGHTMARE!";
-SKILL_EXTREME		= "Unholy massacre.";
 
 CSKILL_BABY			= "Easy does it";
 CSKILL_EASY			= "Not so sticky";
@@ -1601,7 +1600,6 @@ MNU_YELLOWBELLIES	= "YELLOWBELLIES-R-US";
 MNU_BRINGEST		= "BRINGEST THEM ONETH";
 MNU_SMITE			= "THOU ART A SMITE-MEISTER";
 MNU_BLACKPLAGUE		= "BLACK PLAGUE POSSESSES THEE";
-MNU_EXTREME			= "1000 DEATHS AWAIT THEE";
 
 MNU_SQUIRE			= "SQUIRE";
 MNU_KNIGHT			= "KNIGHT";
@@ -2096,10 +2094,12 @@ CMPTMNU_PUSHWINDOW			= "Non-blocking lines can be pushed";
 
 // Sound Options
 SNDMNU_TITLE			= "SOUND OPTIONS";
+SNDMNU_MASTERVOLUME		= "Master volume";
 SNDMNU_SFXVOLUME		= "Sounds volume";
 SNDMNU_MENUVOLUME		= "Menu volume";
 SNDMNU_MUSICVOLUME		= "Music volume";
 SNDMNU_MIDIDEVICE		= "MIDI device";
+SNDMNU_BACKGROUND		= "Sound in Background";
 SNDMNU_UNDERWATERREVERB	= "Underwater reverb";
 SNDMNU_RANDOMIZEPITCHES	= "Randomize pitches";
 SNDMNU_CHANNELS			= "Sound channels";

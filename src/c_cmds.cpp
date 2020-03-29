@@ -1355,11 +1355,15 @@ CCMD(angleconvtest)
 
 EXTERN_CVAR(Float, r_spritedistancecull)
 EXTERN_CVAR(Float, r_linedistancecull)
+EXTERN_CVAR(Float, gl_spritedistancecull)
+EXTERN_CVAR(Float, gl_linedistancecull)
 
 CCMD(culloff)
 {
 		r_spritedistancecull = 0.0;
 		r_linedistancecull = 0.0;
+		gl_spritedistancecull = 0.0;
+		gl_linedistancecull = 0.0;
 }
 
 //============================================================================
@@ -1459,9 +1463,12 @@ CCMD(randi)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteByte (DEM_GIVECHEAT);
-	Net_WriteString ("health");
-	Net_WriteWord (0);
+	if (players[consoleplayer].health < 100)
+	{
+		Net_WriteByte (DEM_GIVECHEAT);
+		Net_WriteString ("health");
+		Net_WriteWord (0);
+	}
 	Net_WriteByte (DEM_GIVECHEAT);
 	Net_WriteString ("greenarmor");
 	Net_WriteWord (0);

@@ -655,13 +655,6 @@ OptionValue Endoom
 	2.0, "$OPTVAL_ONLYMODIFIED"
 }
 
-OptionValue Bits
-{
-	8.0, "8"
-	16.0, "16"
-	32.0, "32"
-}
-
 OptionValue Contrast
 {
 	0.0, "$OPTVAL_OFF"
@@ -722,9 +715,6 @@ OptionMenu "VideoOptions"
 	IfOption(Windows)
 	{
 		Option	"$DSPLYMNU_SHOWENDOOM",			"showendoom", "Endoom"
-		Option "Use Direct3D if available",		"vid_forceddraw", "NoYes"
-		Option "DirectDraw display bits", 		"vid_displaybits", "Bits"
-		StaticText " "
 		//Option "$DSPLYMNU_PALLETEHACK", 		"vid_palettehack", "OnOff"
 		//Option "$DSPLYMNU_ATTACHEDSURFACES", 	"vid_attachedsurfaces", "OnOff"
 	}
@@ -1618,14 +1608,20 @@ OptionValue MidiDevices
 OptionMenu SoundOptions
 {
 	Title "$SNDMNU_TITLE"
+	Slider "$MODMNU_MASTERVOLUME",		"snd_mastervolume", 0, 1, 0.05, 2
+	StaticText " "
 	Slider "$SNDMNU_SFXVOLUME",			"snd_sfxvolume", 0, 1, 0.05, 2
-	Slider "$SNDMNU_MENUVOLUME",		"snd_menuvolume", 0, 1, 0.05, 2
 	Slider "$SNDMNU_MUSICVOLUME",		"snd_musicvolume", 0, 1, 0.05, 2
+	StaticText " "
+	Slider "$SNDMNU_MENUVOLUME",		"snd_menuvolume", 0, 1, 0.05, 2
+	StaticText " "
 	Option "$SNDMNU_MIDIDEVICE",		"snd_mididevice", "MidiDevices"
 	StaticText " "
 	Option "$SNDMNU_UNDERWATERREVERB",	"snd_waterreverb", "OnOff"
 	Option "$SNDMNU_RANDOMIZEPITCHES",	"snd_pitched", "OnOff"
 	Slider "$SNDMNU_CHANNELS",			"snd_channels", 8, 256, 8, 0
+	StaticText " "
+	Option "$SNDMNU_BACKGROUND",			"i_soundinbackground", "OnOff"
 	StaticText " "
 
 	ifoption(fmodex)

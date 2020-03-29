@@ -67,7 +67,7 @@ CUSTOM_CVAR (Int, gl_light_ambient, 20, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 }
 
 CVAR(Int, gl_weaponlight, 8, CVAR_ARCHIVE);
-CVAR(Bool,gl_enhanced_nightvision,true,CVAR_ARCHIVE)
+CVAR(Bool,gl_enhanced_nightvision,false,CVAR_ARCHIVE)
 CVAR(Bool, gl_brightfog, false, CVAR_ARCHIVE);
 
 
@@ -128,7 +128,7 @@ CUSTOM_CVAR(Int,gl_fogmode,1,CVAR_ARCHIVE|CVAR_NOINITCALL)
 	if (self == 2 && gl.shadermodel < 4) self = 1;
 }
 
-CUSTOM_CVAR(Int, gl_lightmode, 3 ,CVAR_ARCHIVE|CVAR_NOINITCALL)
+CUSTOM_CVAR(Int, gl_lightmode, 8 ,CVAR_ARCHIVE|CVAR_NOINITCALL)
 {
 	int newself = self;
 	if (newself > 4) newself=8;	// use 8 for software lighting to avoid conflicts with the bit mask

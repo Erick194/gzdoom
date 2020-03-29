@@ -91,9 +91,9 @@ CVAR(Float, gl_mask_threshold, 0.5f,CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Float, gl_mask_sprite_threshold, 0.5f,CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, gl_forcemultipass, false, 0)
 
-EXTERN_CVAR (Int, screenblocks)
 EXTERN_CVAR (Bool, cl_capfps)
 EXTERN_CVAR (Bool, r_deathcamera)
+EXTERN_CVAR(Int, screenblocks)
 
 
 extern int viewpitch;
@@ -154,10 +154,9 @@ void FGLRenderer::SetViewArea()
 //
 //-----------------------------------------------------------------------------
 
-void FGLRenderer::ResetViewport()
+void FGLRenderer::Reset3DViewport()
 {
-	int trueheight = static_cast<OpenGLFrameBuffer*>(screen)->GetTrueHeight();	// ugh...
-	glViewport(0, (trueheight-screen->GetHeight())/2, screen->GetWidth(), screen->GetHeight()); 
+	glViewport(mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
 }
 
 //-----------------------------------------------------------------------------
@@ -166,38 +165,13 @@ void FGLRenderer::ResetViewport()
 //
 //-----------------------------------------------------------------------------
 
-void FGLRenderer::SetViewport(GL_IRECT *bounds)
+void FGLRenderer::Set3DViewport()
 {
-	if (!bounds)
-	{
-		int height, width;
+	const auto &bounds = mSceneViewport;
 
-		// Special handling so the view with a visible status bar displays properly
+	glViewport(bounds.left, bounds.top, bounds.width, bounds.height);
+	glScissor(bounds.left, bounds.top, bounds.width, bounds.height);
 
-		if (screenblocks >= 10)
-		{
-			height = SCREENHEIGHT;
-			width  = SCREENWIDTH;
-		}
-		else
-		{
-			height = (screenblocks*SCREENHEIGHT/10) & ~7;
-			width = (screenblocks*SCREENWIDTH/10);
-		}
-
-		int trueheight = static_cast<OpenGLFrameBuffer*>(screen)->GetTrueHeight();	// ugh...
-		int bars = (trueheight-screen->GetHeight())/2; 
-
-		int vw = realviewwidth;
-		int vh = realviewheight;
-		glViewport(viewwindowx, trueheight-bars-(height+viewwindowy-((height-vh)/2)), vw, height);
-		glScissor(viewwindowx, trueheight-bars-(vh+viewwindowy), vw, vh);
-	}
-	else
-	{
-		glViewport(bounds->left, bounds->top, bounds->width, bounds->height);
-		glScissor(bounds->left, bounds->top, bounds->width, bounds->height);
-	}
 	glEnable(GL_SCISSOR_TEST);
 	
 	#ifdef _DEBUG
@@ -784,7 +758,7 @@ void FGLRenderer::EndDrawScene(sector_t * viewsector)
 
 	framebuffer->Begin2D(false);
 
-	ResetViewport();
+	Reset3DViewport();
 	// [BB] Only draw the sprites if we didn't render a HUD model before.
 	if ( renderHUDModel == false )
 	{
@@ -915,7 +889,8 @@ sector_t * FGLRenderer::RenderViewpoint (AActor * camera, GL_IRECT * bounds, flo
 		const s3d::EyePose * eye = stereo3dMode.getEyePose(eye_ix);
 		eye->SetUp();
 		// TODO: stereo specific viewport - needed when implementing side-by-side modes etc.
-		SetViewport(bounds);
+		SetOutputViewport(bounds);
+		Set3DViewport();
 		mCurrentFoV = fov;
 		// Stereo mode specific perspective projection
 		eye->GetProjection(fov, ratio, fovratio, projectionMatrix);
@@ -932,7 +907,7 @@ sector_t * FGLRenderer::RenderViewpoint (AActor * camera, GL_IRECT * bounds, flo
 		clipper.SafeAddClipRangeRealAngles(ViewAngle.BAMs() + a1, ViewAngle.BAMs() - a1);
 
 		ProcessScene(toscreen);
-		if (mainview) EndDrawScene(retval);	// do not call this for camera textures.
+		if (mainview && (toscreen || screenblocks > 10)) EndDrawScene(retval);	// do not call this for camera textures.
 		eye->TearDown();
 	}
 	stereo3dMode.TearDown();
@@ -941,7 +916,6 @@ sector_t * FGLRenderer::RenderViewpoint (AActor * camera, GL_IRECT * bounds, flo
 	interpolator.RestoreInterpolations ();
 	return retval;
 }
-
 
 //-----------------------------------------------------------------------------
 //

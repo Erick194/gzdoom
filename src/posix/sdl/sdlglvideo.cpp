@@ -457,3 +457,16 @@ void SDLGLFB::SwapBuffers()
 	SDL_GL_SwapWindow (Screen);
 }
 
+int SDLGLFB::GetClientWidth()
+{
+	int width = 0;
+	SDL_GL_GetDrawableSize(Screen, &width, nullptr);
+	return width;
+}
+
+int SDLGLFB::GetClientHeight()
+{
+	int height = 0;
+	SDL_GL_GetDrawableSize(Screen, nullptr, &height);
+	return height;
+}

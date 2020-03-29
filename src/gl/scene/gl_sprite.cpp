@@ -73,7 +73,7 @@ CVAR(Int, gl_particles_style, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // 0 = square
 CVAR(Int, gl_billboard_mode, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, gl_billboard_particles, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, gl_enhanced_nv_stealth, 3, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CUSTOM_CVAR(Int, gl_fuzztype, 0, CVAR_ARCHIVE)
+CUSTOM_CVAR(Int, gl_fuzztype, 6, CVAR_ARCHIVE)
 {
 	if (self < 0 || self > 7) self = 0;
 }
@@ -578,15 +578,38 @@ void GLSprite::PerformSpriteClipAdjustment(AActor *thing, const DVector2 &thingp
 //
 //==========================================================================
 
+CVAR(Float, gl_spritedistancecull, 4000.0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+inline bool IsDistanceCulled(AActor* thing)
+{
+	double culldist = gl_spritedistancecull * gl_spritedistancecull;
+	if (culldist <= 0.0)
+		return false;
+
+	double dist = (thing->Pos() - ViewPos).LengthSquared();
+
+	if (dist > culldist)
+		return true;
+	return false;
+}
+
 void GLSprite::Process(AActor* thing, sector_t * sector, bool thruportal)
 {
 	sector_t rs;
 	sector_t * rendersector;
+
+	if (thing == nullptr)
+		return;
+
 	// don't draw the thing that's used as camera (for viewshifts during quakes!)
 	if (thing == GLRenderer->mViewActor || (thing == players[consoleplayer].camera && !r_showviewer)) return;
 
+
+	if (IsDistanceCulled(thing)) 
+		return;
+
 	// Don't waste time projecting sprites that are definitely not visible.
-	if (thing == NULL || thing->sprite == 0 || !thing->IsVisibleToPlayer() || !thing->IsInsideVisibleAngles())
+	if (thing->sprite == 0 || !thing->IsVisibleToPlayer() || !thing->IsInsideVisibleAngles())
 	{
 		return;
 	}

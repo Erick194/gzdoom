@@ -144,11 +144,12 @@ bool OpenGLFrameBuffer::WipeStartScreen(int type)
 		return false;
 	}
 
-	wipestartscreen = new FHardwareTexture(Width, Height, false, false, false, true);
-	wipestartscreen->CreateTexture(NULL, Width, Height, false, 0, CM_DEFAULT);
+	const auto &viewport = GLRenderer->mScreenViewport;
+	wipestartscreen = new FHardwareTexture(viewport.width, viewport.height, false, false, false, true);
+	wipestartscreen->CreateTexture(NULL, viewport.width, viewport.height, false, 0, CM_DEFAULT);
 	glFinish();
 	wipestartscreen->Bind(0, CM_DEFAULT);
-	glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Width, Height);
+	glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, viewport.left, viewport.top, viewport.width, viewport.height);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -167,11 +168,12 @@ bool OpenGLFrameBuffer::WipeStartScreen(int type)
 
 void OpenGLFrameBuffer::WipeEndScreen()
 {
-	wipeendscreen = new FHardwareTexture(Width, Height, false, false, false, true);
-	wipeendscreen->CreateTexture(NULL, Width, Height, false, 0, CM_DEFAULT);
+	const auto &viewport = GLRenderer->mScreenViewport;
+	wipeendscreen = new FHardwareTexture(viewport.width, viewport.height, false, false, false, true);
+	wipeendscreen->CreateTexture(NULL, viewport.width, viewport.height, false, 0, CM_DEFAULT);
 	glFlush();
 	wipeendscreen->Bind(0, CM_DEFAULT);
-	glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, Width, Height);
+	glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, viewport.left, viewport.top, viewport.width, viewport.height);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

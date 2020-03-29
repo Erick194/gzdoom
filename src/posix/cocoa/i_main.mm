@@ -59,6 +59,7 @@
 // ---------------------------------------------------------------------------
 
 
+CVAR (Bool, i_soundinbackground, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 EXTERN_CVAR(Int,  vid_defwidth )
 EXTERN_CVAR(Int,  vid_defheight)
 EXTERN_CVAR(Bool, vid_vsync    )
@@ -321,7 +322,7 @@ ApplicationController* appCtrl;
 {
 	ZD_UNUSED(aNotification);
 	
-	S_SetSoundPaused(0);
+	S_SetSoundPaused((!!i_soundinbackground) || 0);
 }
 
 

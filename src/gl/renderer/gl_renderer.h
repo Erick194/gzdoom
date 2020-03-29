@@ -78,14 +78,21 @@ public:
 
 	FFlatVertexBuffer *mVBO;
 
+	GL_IRECT mScreenViewport;
+	GL_IRECT mSceneViewport;
+	GL_IRECT mOutputLetterbox;
 
 	FGLRenderer(OpenGLFrameBuffer *fb);
 	~FGLRenderer() ;
 
+	void SetOutputViewport(GL_IRECT *bounds);
+	int ScreenToWindowX(int x);
+	int ScreenToWindowY(int y);
+
 	angle_t FrustumAngle();
 	void SetViewArea();
-	void ResetViewport();
-	void SetViewport(GL_IRECT *bounds);
+	void Set3DViewport();
+	void Reset3DViewport();
 	sector_t *RenderViewpoint (AActor * camera, GL_IRECT * bounds, float fov, float ratio, float fovratio, bool mainview, bool toscreen);
 	void RenderView(player_t *player);
 	void SetViewAngle(DAngle viewangle);

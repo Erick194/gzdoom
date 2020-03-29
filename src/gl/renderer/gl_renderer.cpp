@@ -49,6 +49,7 @@
 //#include "gl/gl_intern.h"
 #include "gl/gl_functions.h"
 #include "vectors.h"
+#include "doomstat.h"
 
 #include "gl/system/gl_interface.h"
 #include "gl/system/gl_framebuffer.h"
@@ -66,6 +67,10 @@
 #include "gl/utility/gl_clock.h"
 #include "gl/utility/gl_templates.h"
 #include "gl/models/gl_models.h"
+
+EXTERN_CVAR(Int, screenblocks)
+
+CVAR(Bool, gl_scale_viewport, true, CVAR_ARCHIVE);
 
 //===========================================================================
 // 
@@ -122,6 +127,99 @@ FGLRenderer::~FGLRenderer()
 	if (mFBID != 0) glDeleteFramebuffersEXT(1, &mFBID);
 }
 
+//==========================================================================
+//
+// Calculates the viewport values needed for 2D and 3D operations
+//
+//==========================================================================
+
+void FGLRenderer::SetOutputViewport(GL_IRECT *bounds)
+{
+	if (bounds)
+	{
+		mSceneViewport = *bounds;
+		mScreenViewport = *bounds;
+		mOutputLetterbox = *bounds;
+		return;
+	}
+
+	// Special handling so the view with a visible status bar displays properly
+	int height, width;
+	if (screenblocks >= 10)
+	{
+		height = framebuffer->GetHeight();
+		width = framebuffer->GetWidth();
+	}
+	else
+	{
+		height = (screenblocks*framebuffer->GetHeight() / 10) & ~7;
+		width = (screenblocks*framebuffer->GetWidth() / 10);
+	}
+
+	// Back buffer letterbox for the final output
+	int clientWidth = framebuffer->GetClientWidth();
+	int clientHeight = framebuffer->GetClientHeight();
+	if (clientWidth == 0 || clientHeight == 0)
+	{
+		// When window is minimized there may not be any client area.
+		// Pretend to the rest of the render code that we just have a very small window.
+		clientWidth = 160;
+		clientHeight = 120;
+	}
+	int screenWidth = framebuffer->GetWidth();
+	int screenHeight = framebuffer->GetHeight();
+	float scale = MIN(clientWidth / (float)screenWidth, clientHeight / (float)screenHeight);
+	mOutputLetterbox.width = (int)round(screenWidth * scale);
+	mOutputLetterbox.height = (int)round(screenHeight * scale);
+	mOutputLetterbox.left = (clientWidth - mOutputLetterbox.width) / 2;
+	mOutputLetterbox.top = (clientHeight - mOutputLetterbox.height) / 2;
+
+	// The entire renderable area, including the 2D HUD
+	mScreenViewport.left = 0;
+	mScreenViewport.top = 0;
+	mScreenViewport.width = screenWidth;
+	mScreenViewport.height = screenHeight;
+
+	// Viewport for the 3D scene
+	mSceneViewport.left = viewwindowx;
+	mSceneViewport.top = screenHeight - (height + viewwindowy - ((height - realviewheight) / 2));
+	mSceneViewport.width = realviewwidth;
+	mSceneViewport.height = height;
+
+	// Scale viewports to fit letterbox
+	if (gl_scale_viewport && !framebuffer->IsFullscreen())
+	{
+		mScreenViewport.width = mOutputLetterbox.width;
+		mScreenViewport.height = mOutputLetterbox.height;
+		mSceneViewport.left = (int)round(mSceneViewport.left * scale);
+		mSceneViewport.top = (int)round(mSceneViewport.top * scale);
+		mSceneViewport.width = (int)round(mSceneViewport.width * scale);
+		mSceneViewport.height = (int)round(mSceneViewport.height * scale);
+
+		// Without render buffers we have to render directly to the letterbox
+		mScreenViewport.left += mOutputLetterbox.left;
+		mScreenViewport.top += mOutputLetterbox.top;
+		mSceneViewport.left += mOutputLetterbox.left;
+		mSceneViewport.top += mOutputLetterbox.top;
+	}
+}
+
+//===========================================================================
+// 
+// Calculates the OpenGL window coordinates for a zdoom screen position
+//
+//===========================================================================
+
+int FGLRenderer::ScreenToWindowX(int x)
+{
+	return mScreenViewport.left + (int)round(x * mScreenViewport.width / (float)framebuffer->GetWidth());
+}
+
+int FGLRenderer::ScreenToWindowY(int y)
+{
+	return mScreenViewport.top + mScreenViewport.height - (int)round(y * mScreenViewport.height / (float)framebuffer->GetHeight());
+}
+
 //===========================================================================
 // 
 //
@@ -135,6 +233,9 @@ void FGLRenderer::SetupLevel()
 
 void FGLRenderer::Begin2D()
 {
+	glViewport(mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
+	glScissor(mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
+
 	gl_RenderState.EnableFog(false);
 	gl_RenderState.Set2DMode(true);
 }
@@ -247,52 +348,6 @@ unsigned char *FGLRenderer::GetTextureBuffer(FTexture *tex, int &w, int &h)
 	return NULL;
 }
 
-//===========================================================================
-// 
-//
-//
-//===========================================================================
-
-void FGLRenderer::ClearBorders()
-{
-	OpenGLFrameBuffer *glscreen = static_cast<OpenGLFrameBuffer*>(screen);
-
-	// Letterbox time! Draw black top and bottom borders.
-	int width = glscreen->GetWidth();
-	int height = glscreen->GetHeight();
-	int trueHeight = glscreen->GetTrueHeight();
-
-	int borderHeight = (trueHeight - height) / 2;
-
-	glViewport(0, 0, width, trueHeight);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0.0, width * 1.0, 0.0, trueHeight, -1.0, 1.0);
-	glMatrixMode(GL_MODELVIEW);
-	glColor3f(0.f, 0.f, 0.f);
-	gl_RenderState.Set2DMode(true);
-	gl_RenderState.EnableTexture(false);
-	gl_RenderState.Apply(true);
-
-	glBegin(GL_QUADS);
-	// upper quad
-	glVertex2i(0, borderHeight);
-	glVertex2i(0, 0);
-	glVertex2i(width, 0);
-	glVertex2i(width, borderHeight);
-
-	// lower quad
-	glVertex2i(0, trueHeight);
-	glVertex2i(0, trueHeight - borderHeight);
-	glVertex2i(width, trueHeight - borderHeight);
-	glVertex2i(width, trueHeight);
-	glEnd();
-
-	gl_RenderState.EnableTexture(true);
-
-	glViewport(0, (trueHeight - height) / 2, width, height); 
-}
-
 //==========================================================================
 //
 // Draws a texture
@@ -381,12 +436,10 @@ void FGLRenderer::DrawTexture(FTexture *img, DrawParms &parms)
 	}
 	
 	// scissor test doesn't use the current viewport for the coordinates, so use real screen coordinates
-	int btm = (SCREENHEIGHT - screen->GetHeight()) / 2;
-	btm = SCREENHEIGHT - btm;
-
 	glEnable(GL_SCISSOR_TEST);
-	int space = (static_cast<OpenGLFrameBuffer*>(screen)->GetTrueHeight()-screen->GetHeight())/2;
-	glScissor(parms.lclip, btm - parms.dclip + space, parms.rclip - parms.lclip, parms.dclip - parms.uclip);
+	glScissor(GLRenderer->ScreenToWindowX(parms.lclip), GLRenderer->ScreenToWindowY(parms.dclip), 
+		GLRenderer->ScreenToWindowX(parms.rclip) - GLRenderer->ScreenToWindowX(parms.lclip), 
+		GLRenderer->ScreenToWindowY(parms.uclip) - GLRenderer->ScreenToWindowY(parms.dclip));
 	
 	gl_SetRenderStyle(parms.style, !parms.masked, false);
 	if (img->bHasCanvas)
@@ -430,7 +483,8 @@ void FGLRenderer::DrawTexture(FTexture *img, DrawParms &parms)
 
 	gl_RenderState.EnableAlphaTest(true);
 	
-	glScissor(0, 0, screen->GetWidth(), screen->GetHeight());
+	const auto &viewport = GLRenderer->mScreenViewport;
+	glScissor(viewport.left, viewport.top, viewport.width, viewport.height);
 	glDisable(GL_SCISSOR_TEST);
 	gl_RenderState.SetTextureMode(TM_MODULATE);
 	gl_RenderState.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -557,16 +611,6 @@ void FGLRenderer::Clear(int left, int top, int right, int bottom, int palcolor, 
 	
 	
 	rt = screen->GetHeight() - top;
-	
-	int space = (static_cast<OpenGLFrameBuffer*>(screen)->GetTrueHeight()-screen->GetHeight())/2;	// ugh...
-	rt += space;
-	/*
-	if (!m_windowed && (m_trueHeight != m_height))
-	{
-		offY = (m_trueHeight - m_height) / 2;
-		rt += offY;
-	}
-	*/
 	
 	glEnable(GL_SCISSOR_TEST);
 	glScissor(left, rt - height, width, height);

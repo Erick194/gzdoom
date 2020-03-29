@@ -20,6 +20,7 @@
 #include "c_dispatch.h"
 #include "doomdef.h"
 #include "doomstat.h"
+#include "version.h"
 #include "win32iface.h"
 #include "templates.h"
 #include "gameconfigfile.h"
@@ -128,7 +129,7 @@ public:
 	~FDInputJoystick();
 
 	bool GetDevice();
-	void ProcessInput();
+	void ProcessInput(unsigned int joynum);
 	void AddAxes(float axes[NUM_JOYAXIS]);
 
 	// IJoystickConfig interface
@@ -255,6 +256,11 @@ CUSTOM_CVAR(Bool, joy_dinput, true, CVAR_GLOBALCONFIG|CVAR_ARCHIVE|CVAR_NOINITCA
 	D_PostEvent(&ev);
 }
 
+CUSTOM_CVAR(Bool, joy_background, true, CVAR_GLOBALCONFIG|CVAR_ARCHIVE|CVAR_NOINITCALL)
+{
+	Printf("This won't take effect until " GAMENAME " is restarted.\n");
+}
+
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
 static const BYTE POVButtons[9] = { 0x01, 0x03, 0x02, 0x06, 0x04, 0x0C, 0x08, 0x09, 0x00 };
@@ -358,7 +364,14 @@ bool FDInputJoystick::GetDevice()
 		Printf(TEXTCOLOR_ORANGE "Setting data format for %s failed.\n", Name.GetChars());
 		return false;
 	}
-	hr = Device->SetCooperativeLevel(Window, DISCL_NONEXCLUSIVE | DISCL_FOREGROUND);
+	if (joy_background)
+	{
+		hr = Device->SetCooperativeLevel(Window, DISCL_NONEXCLUSIVE | DISCL_BACKGROUND);
+	}
+	else
+	{
+		hr = Device->SetCooperativeLevel(Window, DISCL_NONEXCLUSIVE | DISCL_FOREGROUND);
+	}
 	if (FAILED(hr))
 	{
 		Printf(TEXTCOLOR_ORANGE "Setting cooperative level for %s failed.\n", Name.GetChars());
@@ -378,7 +391,7 @@ bool FDInputJoystick::GetDevice()
 //
 //===========================================================================
 
-void FDInputJoystick::ProcessInput()
+void FDInputJoystick::ProcessInput(unsigned int joynum)
 {
 	HRESULT hr;
 	BYTE *state;
@@ -429,16 +442,36 @@ void FDInputJoystick::ProcessInput()
 		// Cancel out dead zone
 		axisval = Joy_RemoveDeadZone(axisval, info->DeadZone, &buttonstate);
 		info->Value = float(axisval);
+
+		int keyjoynaxis1plus;
+		switch (joynum)
+		{
+		case 0:
+			keyjoynaxis1plus = KEY_JOYAXIS1PLUS;
+			break;
+		case 1:
+			keyjoynaxis1plus = KEY_JOY2AXIS1PLUS;
+			break;
+		case 2:
+			keyjoynaxis1plus = KEY_JOY3AXIS1PLUS;
+			break;
+		case 3:
+			keyjoynaxis1plus = KEY_JOY4AXIS1PLUS;
+			break;
+		default:
+			keyjoynaxis1plus = KEY_JOYAXIS1PLUS;
+			break;
+		}
 		if (i < NUM_JOYAXISBUTTONS && (i > 2 || Axes.Size() == 1))
 		{
-			Joy_GenerateButtonEvents(info->ButtonValue, buttonstate, 2, KEY_JOYAXIS1PLUS + i*2);
+			Joy_GenerateButtonEvents(info->ButtonValue, buttonstate, 2, keyjoynaxis1plus + i*2);
 		}
 		else if (i == 1)
 		{
 			// Since we sorted the axes, we know that the first two are definitely X and Y.
 			// They are probably a single stick, so use angular position to determine buttons.
 			buttonstate = Joy_XYAxesToButtons(axisval, Axes[0].Value);
-			Joy_GenerateButtonEvents(info->ButtonValue, buttonstate, 4, KEY_JOYAXIS1PLUS);
+			Joy_GenerateButtonEvents(info->ButtonValue, buttonstate, 4, keyjoynaxis1plus);
 		}
 		info->ButtonValue = buttonstate;
 	}
@@ -452,7 +485,24 @@ void FDInputJoystick::ProcessInput()
 		if (newstate != info->Value)
 		{
 			info->Value = newstate;
-			ev.data1 = KEY_FIRSTJOYBUTTON + i;
+			switch (joynum)
+			{
+			case 0:
+				ev.data1 = KEY_FIRSTJOYBUTTON + i;
+				break;
+			case 1:
+				ev.data1 = KEY_FIRSTJOY2BUTTON + i;
+				break;
+			case 2:
+				ev.data1 = KEY_FIRSTJOY3BUTTON + i;
+				break;
+			case 3:
+				ev.data1 = KEY_FIRSTJOY4BUTTON + i;
+				break;
+			default:
+				ev.data1 = KEY_FIRSTJOYBUTTON + i;
+				break;
+			}
 			ev.type = (newstate != 0) ? EV_KeyDown : EV_KeyUp;
 			D_PostEvent(&ev);
 		}
@@ -473,7 +523,24 @@ void FDInputJoystick::ProcessInput()
 		pov = POVButtons[pov];
 
 		// Send events for POV "buttons" that have changed.
-		Joy_GenerateButtonEvents(info->Value, pov, 4, KEY_JOYPOV1_UP + i*4);
+		switch (joynum)
+		{
+		case 0:
+			Joy_GenerateButtonEvents(info->Value, pov, 4, KEY_JOYPOV1_UP + i*4);
+			break;
+		case 1:
+			Joy_GenerateButtonEvents(info->Value, pov, 4, KEY_JOY2POV1_UP + i*4);
+			break;
+		case 2:
+			Joy_GenerateButtonEvents(info->Value, pov, 4, KEY_JOY3POV1_UP + i*4);
+			break;
+		case 3:
+			Joy_GenerateButtonEvents(info->Value, pov, 4, KEY_JOY4POV1_UP + i*4);
+			break;
+		default:
+			Joy_GenerateButtonEvents(info->Value, pov, 4, KEY_JOYPOV1_UP + i*4);
+			break;
+		}
 		info->Value = pov;
 	}
 }
@@ -519,7 +586,7 @@ BOOL CALLBACK FDInputJoystick::EnumObjectsCallback(LPCDIDEVICEOBJECTINSTANCE lpd
 		// joystick buttons. This is what DIJOYSTATE2 offers, so we
 		// probably don't need to worry about any devices with more than
 		// that.
-		if (joy->Buttons.Size() < 128)
+		if (joy->Buttons.Size() < 128) // with more than 32 they will overlap as before
 		{
 			joy->Buttons.Push(info);
 		}
@@ -1038,7 +1105,7 @@ void FDInputJoystickManager::ProcessInput()
 	{
 		if (Devices[i] != NULL)
 		{
-			Devices[i]->ProcessInput();
+			Devices[i]->ProcessInput(i);
 		}
 	}
 }

@@ -105,30 +105,30 @@ const char *KeyNames[NUM_KEYS] =
 	"joy21",	"joy22",	"joy23",	"joy24",
 	"joy25",	"joy26",	"joy27",	"joy28",
 	"joy29",	"joy30",	"joy31",	"joy32",
-	"joy33",	"joy34",	"joy35",	"joy36",
-	"joy37",	"joy38",	"joy39",	"joy40",
-	"joy41",	"joy42",	"joy43",	"joy44",
-	"joy45",	"joy46",	"joy47",	"joy48",
-	"joy49",	"joy50",	"joy51",	"joy52",
-	"joy53",	"joy54",	"joy55",	"joy56",
-	"joy57",	"joy58",	"joy59",	"joy60",
-	"joy61",	"joy62",	"joy63",	"joy64",
-	"joy65",	"joy66",	"joy67",	"joy68",
-	"joy69",	"joy70",	"joy71",	"joy72",
-	"joy73",	"joy74",	"joy75",	"joy76",
-	"joy77",	"joy78",	"joy79",	"joy80",
-	"joy81",	"joy82",	"joy83",	"joy84",
-	"joy85",	"joy86",	"joy87",	"joy88",
-	"joy89",	"joy90",	"joy91",	"joy92",
-	"joy93",	"joy94",	"joy95",	"joy96",
-	"joy97",	"joy98",	"joy99",	"joy100",
-	"joy101",	"joy102",	"joy103",	"joy104",
-	"joy105",	"joy106",	"joy107",	"joy108",
-	"joy109",	"joy110",	"joy111",	"joy112",
-	"joy113",	"joy114",	"joy115",	"joy116",
-	"joy117",	"joy118",	"joy119",	"joy120",
-	"joy121",	"joy122",	"joy123",	"joy124",
-	"joy125",	"joy126",	"joy127",	"joy128",
+	"joy2_1",	"joy2_2",	"joy2_3",	"joy2_4",
+	"joy2_5",	"joy2_6",	"joy2_7",	"joy2_8",
+	"joy2_9",	"joy2_10",	"joy2_11",	"joy2_12",
+	"joy2_13",	"joy2_14",	"joy2_15",	"joy2_16",
+	"joy2_17",	"joy2_18",	"joy2_19",	"joy2_20",
+	"joy2_21",	"joy2_22",	"joy2_23",	"joy2_24",
+	"joy2_25",	"joy2_26",	"joy2_27",	"joy2_28",
+	"joy2_29",	"joy2_30",	"joy2_31",	"joy2_32",
+	"joy3_1",	"joy3_2",	"joy3_3",	"joy3_4",
+	"joy3_5",	"joy3_6",	"joy3_7",	"joy3_8",
+	"joy3_9",	"joy3_10",	"joy3_11",	"joy3_12",
+	"joy3_13",	"joy3_14",	"joy3_15",	"joy3_16",
+	"joy3_17",	"joy3_18",	"joy3_19",	"joy3_20",
+	"joy3_21",	"joy3_22",	"joy3_23",	"joy3_24",
+	"joy3_25",	"joy3_26",	"joy3_27",	"joy3_28",
+	"joy3_29",	"joy3_30",	"joy3_31",	"joy3_32",
+	"joy4_1",	"joy4_2",	"joy4_3",	"joy4_4",
+	"joy4_5",	"joy4_6",	"joy4_7",	"joy4_8",
+	"joy4_9",	"joy4_10",	"joy4_11",	"joy4_12",
+	"joy4_13",	"joy4_14",	"joy4_15",	"joy4_16",
+	"joy4_17",	"joy4_18",	"joy4_19",	"joy4_20",
+	"joy4_21",	"joy4_22",	"joy4_23",	"joy4_24",
+	"joy4_25",	"joy4_26",	"joy4_27",	"joy4_28",
+	"joy4_29",	"joy4_30",	"joy4_31",	"joy4_32",
 
 	"pov1up",	"pov1right","pov1down",	"pov1left",		// First POV hat
 	"pov2up",	"pov2right","pov2down",	"pov2left",		// Second POV hat
@@ -149,7 +149,61 @@ const char *KeyNames[NUM_KEYS] =
 	"dpadup","dpaddown","dpadleft","dpadright",	// Gamepad buttons
 	"pad_start","pad_back","lthumb","rthumb",
 	"lshoulder","rshoulder","ltrigger","rtrigger",
-	"pad_a", "pad_b", "pad_x", "pad_y"
+	"pad_a", "pad_b", "pad_x", "pad_y",
+
+	"pov21up",	"pov21right","pov21down",	"pov21left",		// First POV hat
+	"pov22up",	"pov22right","pov22down",	"pov22left",		// Second POV hat
+	"pov23up",	"pov23right","pov23down",	"pov23left",		// Third POV hat
+	"pov24up",	"pov24right","pov24down",	"pov24left",		// Fourth POV hat
+
+	"pov31up",	"pov31right","pov31down",	"pov31left",		// First POV hat
+	"pov32up",	"pov32right","pov32down",	"pov32left",		// Second POV hat
+	"pov33up",	"pov33right","pov33down",	"pov33left",		// Third POV hat
+	"pov34up",	"pov34right","pov34down",	"pov34left",		// Fourth POV hat
+
+	"pov41up",	"pov41right","pov41down",	"pov41left",		// First POV hat
+	"pov42up",	"pov42right","pov42down",	"pov42left",		// Second POV hat
+	"pov43up",	"pov43right","pov43down",	"pov43left",		// Third POV hat
+	"pov44up",	"pov44right","pov44down",	"pov44left",		// Fourth POV hat
+
+	"axis21plus","axis21minus","axis22plus","axis22minus",	// joystick axes as buttons
+	"axis23plus","axis23minus","axis24plus","axis24minus",
+	"axis25plus","axis25minus","axis26plus","axis26minus",
+	"axis27plus","axis27minus","axis28plus","axis28minus",
+
+	"axis31plus","axis31minus","axis32plus","axis32minus",	// joystick axes as buttons
+	"axis33plus","axis33minus","axis34plus","axis34minus",
+	"axis35plus","axis35minus","axis36plus","axis36minus",
+	"axis37plus","axis37minus","axis38plus","axis38minus",
+
+	"axis41plus","axis41minus","axis42plus","axis42minus",	// joystick axes as buttons
+	"axis43plus","axis43minus","axis44plus","axis44minus",
+	"axis45plus","axis45minus","axis46plus","axis46minus",
+	"axis47plus","axis47minus","axis48plus","axis48minus",
+
+	"lstick2right","lstick2left","lstick2down","lstick2up",			// Gamepad axis-based buttons
+	"rstick2right","rstick2left","rstick2down","rstick2up",
+
+	"dpad2up","dpad2down","dpad2left","dpad2right",	// Gamepad buttons
+	"pad2_start","pad2_back","lthumb2","rthumb2",
+	"lshoulder2","rshoulder2","ltrigger2","rtrigger2",
+	"pad2_a", "pad2_b", "pad2_x", "pad2_y",
+
+	"lstick3right","lstick3left","lstick3down","lstick3up",			// Gamepad axis-based buttons
+	"rstick3right","rstick3left","rstick3down","rstick3up",
+
+	"dpad3up","dpad3down","dpad3left","dpad3right",	// Gamepad buttons
+	"pad3_start","pad3_back","lthumb3","rthumb3",
+	"lshoulder3","rshoulder3","ltrigger3","rtrigger3",
+	"pad3_a", "pad3_b", "pad3_x", "pad3_y",
+
+	"lstick4right","lstick4left","lstick4down","lstick4up",			// Gamepad axis-based buttons
+	"rstick4right","rstick4left","rstick4down","rstick4up",
+
+	"dpad4up","dpad4down","dpad4left","dpad4right",	// Gamepad buttons
+	"pad4_start","pad4_back","lthumb4","rthumb4",
+	"lshoulder4","rshoulder4","ltrigger4","rtrigger4",
+	"pad4_a", "pad4_b", "pad4_x", "pad4_y"
 };
 
 FKeyBindings Bindings;
@@ -199,7 +253,7 @@ static int GetConfigKeyFromName (const char *key)
 		{
 			keynum = GetKeyFromName ("[");
 		}
-		else if (stricmp (key, "RightBracket") == 0)
+		else if (stricmp (key, "qqBracket") == 0)
 		{
 			keynum = GetKeyFromName ("]");
 		}
