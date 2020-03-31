@@ -1,27 +1,25 @@
-// 
-//---------------------------------------------------------------------------
-//
-// Copyright(C) 2016 Magnus Norddahl
-// All rights reserved.
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//--------------------------------------------------------------------------
-//
 /*
-** gl_renderbuffers.cpp
-** Render buffers used during rendering
+**  Postprocessing framework
+**  Copyright (c) 2016-2020 Magnus Norddahl
+**
+**  This software is provided 'as-is', without any express or implied
+**  warranty.  In no event will the authors be held liable for any damages
+**  arising from the use of this software.
+**
+**  Permission is granted to anyone to use this software for any purpose,
+**  including commercial applications, and to alter it and redistribute it
+**  freely, subject to the following restrictions:
+**
+**  1. The origin of this software must not be misrepresented; you must not
+**     claim that you wrote the original software. If you use this software
+**     in a product, an acknowledgment in the product documentation would be
+**     appreciated but is not required.
+**  2. Altered source versions must be plainly marked as such, and must not be
+**     misrepresented as being the original software.
+**  3. This notice may not be removed or altered from any source distribution.
+**
+**  gl_renderbuffers.cpp
+**  Render buffers used during rendering
 **
 */
 
@@ -63,6 +61,7 @@ FGLRenderBuffers::~FGLRenderBuffers()
 	ClearExposureLevels();
 	ClearAmbientOcclusion();
 	ClearShadowMap();
+	DeleteTexture(mDitherTexture);
 }
 
 void FGLRenderBuffers::ClearScene()
@@ -737,6 +736,28 @@ void FGLRenderBuffers::BindEyeFB(int eye, bool readBuffer)
 {
 	CreateEyeBuffers(eye);
 	glBindFramebuffer(readBuffer ? GL_READ_FRAMEBUFFER : GL_FRAMEBUFFER, mEyeFBs[eye].handle);
+}
+
+void FGLRenderBuffers::BindDitherTexture(int texunit)
+{
+	if (!mDitherTexture)
+	{
+		static const float data[64] =
+		{
+			 .0078125, .2578125, .1328125, .3828125, .0234375, .2734375, .1484375, .3984375,
+			 .7578125, .5078125, .8828125, .6328125, .7734375, .5234375, .8984375, .6484375,
+			 .0703125, .3203125, .1953125, .4453125, .0859375, .3359375, .2109375, .4609375,
+			 .8203125, .5703125, .9453125, .6953125, .8359375, .5859375, .9609375, .7109375,
+			 .0390625, .2890625, .1640625, .4140625, .0546875, .3046875, .1796875, .4296875,
+			 .7890625, .5390625, .9140625, .6640625, .8046875, .5546875, .9296875, .6796875,
+			 .1015625, .3515625, .2265625, .4765625, .1171875, .3671875, .2421875, .4921875,
+			 .8515625, .6015625, .9765625, .7265625, .8671875, .6171875, .9921875, .7421875,
+		};
+
+		glActiveTexture(GL_TEXTURE0 + texunit);
+		mDitherTexture = Create2DTexture("DitherTexture", GL_R32F, 8, 8, data);
+	}
+	mDitherTexture.Bind(1, GL_NEAREST, GL_REPEAT);
 }
 
 //==========================================================================

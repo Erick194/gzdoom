@@ -77,13 +77,24 @@ class ConversationMenu : Menu
 	Array<String> mResponseLines;
 	Array<uint> mResponses;
 	bool mShowGold;
+	bool mHasBackdrop;
+	bool mConfineTextToBackdrop; // hack hack
 	StrifeDialogueNode mCurNode;
 	int mYpos;
 	PlayerInfo mPlayer;
 	int mSelection;
 	int ConversationPauseTic;
 	int LineHeight;
-	
+	int ReplyLineHeight;
+	Font displayFont;
+	int speechDisplayWidth;
+	int displayWidth;
+	int displayHeight;
+	int fontScale;
+	int refwidth;
+	int refheight;
+	double fontfactor;
+
 	int SpeechWidth;
 	int ReplyWidth;
 	
@@ -94,7 +105,7 @@ class ConversationMenu : Menu
 
 	//=============================================================================
 	//
-	// returns the y position of the replies boy for positioning the terminal response.
+	// returns the y position of the replies box for positioning the terminal response.
 	//
 	//=============================================================================
 
@@ -105,9 +116,23 @@ class ConversationMenu : Menu
 		mShowGold = false;
 		ConversationPauseTic = gametic + 20;
 		DontDim = true;
-		
+
+		let tex = TexMan.CheckForTexture (CurNode.Backdrop, TexMan.Type_MiscPatch);
+		mHasBackdrop = tex.isValid();
+		DontBlur = !mHasBackdrop;
+
+		displayFont = SmallFont;
+		displayWidth = CleanWidth;
+		displayHeight = CleanHeight;
+		fontScale = CleanXfac;
+		fontFactor = 1;
+		refwidth = 320;
+		refheight = 200;
 		ReplyWidth = 320-50-10;
 		SpeechWidth = screen.GetWidth()/CleanXfac - 24*2;
+		ReplyLineHeight = LineHeight = displayFont.GetHeight();
+		mConfineTextToBackdrop = false; // hack hack
+		speechDisplayWidth = displayWidth;
 		LineHeight = SmallFont.GetHeight();
 
 		FormatSpeakerMessage();
@@ -225,8 +250,8 @@ class ConversationMenu : Menu
 
 	override void OnDestroy()
 	{
-		mDialogueLines.Destroy();
-		SetMusicVolume (1);
+		if (mDialogueLines != null) mDialogueLines.Destroy();
+		SetMusicVolume (Level.MusicVolume);
 		Super.OnDestroy();
 	}
 
@@ -326,7 +351,7 @@ class ConversationMenu : Menu
 		}
 		if (sel != -1 && sel != mSelection)
 		{
-			//S_Sound (CHAN_VOICE | CHAN_UI, "menu/cursor", snd_menuvolume, ATTN_NONE);
+			//S_Sound (CHAN_VOICE, CHANF_UI, "menu/cursor", snd_menuvolume, ATTN_NONE);
 		}
 		mSelection = sel;
 		if (type == MOUSE_Release)

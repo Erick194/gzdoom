@@ -255,7 +255,7 @@ double UDMFParserBase::CheckCoordinate(const char *key)
 	}
 	if (sc.Float < -32768 || sc.Float > 32768)
 	{
-		sc.ScriptMessage("Value %f out of range for a coordinate '%s'. Valid range is ]-32768 .. 32768]", sc.Float, key);
+		sc.ScriptMessage("Value %f out of range for a coordinate '%s'. Valid range is [-32768 .. 32768]", sc.Float, key);
 		BadCoordinates = true;	// If this happens the map must not allowed to be started.
 	}
 	return sc.Float;
@@ -1090,6 +1090,14 @@ public:
 				ld->automapstyle = AutomapLineStyle(CheckInt(key));
 				continue;
 
+			case NAME_NoSkyWalls:
+				Flag(ld->flags, ML_NOSKYWALLS, key);
+				continue;
+
+			case NAME_DrawFullHeight:
+				Flag(ld->flags, ML_DRAWFULLHEIGHT, key);
+				continue;
+
 			case NAME_MoreIds:
 				// delay parsing of the tag string until parsing of the sector is complete
 				// This ensures that the ID is always the first tag in the list.
@@ -1324,7 +1332,7 @@ public:
 				break;
 
 			case NAME_useowncolors_top:
-				Flag(sd->textures[side_t::top].flags, side_t::part::UseOwnColors, key);
+				Flag(sd->textures[side_t::top].flags, side_t::part::UseOwnSpecialColors, key);
 				break;
 
 			case NAME_uppercolor_top:
@@ -1348,7 +1356,7 @@ public:
 				break;
 
 			case NAME_useowncolors_mid:
-				Flag(sd->textures[side_t::mid].flags, side_t::part::UseOwnColors, key);
+				Flag(sd->textures[side_t::mid].flags, side_t::part::UseOwnSpecialColors, key);
 				break;
 
 			case NAME_uppercolor_mid:
@@ -1372,7 +1380,7 @@ public:
 				break;
 
 			case NAME_useowncolors_bottom:
-				Flag(sd->textures[side_t::bottom].flags, side_t::part::UseOwnColors, key);
+				Flag(sd->textures[side_t::bottom].flags, side_t::part::UseOwnSpecialColors, key);
 				break;
 
 			case NAME_uppercolor_bottom:
@@ -1383,6 +1391,26 @@ public:
 				sd->SetSpecialColor(side_t::bottom, 1, CheckInt(key));
 				break;
 
+			case NAME_coloradd_top:
+				sd->SetAdditiveColor(side_t::top, CheckInt(key));
+				break;
+
+			case NAME_coloradd_mid:
+				sd->SetAdditiveColor(side_t::mid, CheckInt(key));
+				break;
+
+			case NAME_coloradd_bottom:
+				sd->SetAdditiveColor(side_t::bottom, CheckInt(key));
+				break;
+
+			case NAME_useowncoloradd_top:
+				sd->textures[side_t::top].flags |= side_t::part::UseOwnAdditiveColor * CheckBool(key);
+
+			case NAME_useowncoloradd_mid:
+				sd->textures[side_t::mid].flags |= side_t::part::UseOwnAdditiveColor * CheckBool(key);
+
+			case NAME_useowncoloradd_bottom:
+				sd->textures[side_t::bottom].flags |= side_t::part::UseOwnAdditiveColor * CheckBool(key);
 
 			default:
 				break;
@@ -1447,6 +1475,7 @@ public:
 		sec->damageinterval = 32;
 		sec->terrainnum[sector_t::ceiling] = sec->terrainnum[sector_t::floor] = -1;
 		memset(sec->SpecialColors, -1, sizeof(sec->SpecialColors));
+		memset(sec->AdditiveColors, 0, sizeof(sec->AdditiveColors));
 		if (floordrop) sec->Flags = SECF_FLOORDROP;
 		// killough 3/7/98: end changes
 
@@ -1617,6 +1646,26 @@ public:
 
 				case NAME_Color_Sprites:
 					sec->SpecialColors[sector_t::sprites] = CheckInt(key) | 0xff000000;
+					break;
+
+				case NAME_ColorAdd_Floor:
+					sec->AdditiveColors[sector_t::floor] = CheckInt(key) | 0xff000000; // Alpha is used to decide whether or not to use the color
+					break;
+
+				case NAME_ColorAdd_Ceiling:
+					sec->AdditiveColors[sector_t::ceiling] = CheckInt(key) | 0xff000000;
+					break;
+
+				case NAME_ColorAdd_Walls:
+					sec->AdditiveColors[sector_t::walltop] = CheckInt(key) | 0xff000000;
+					break;
+
+				case NAME_ColorAdd_Sprites:
+					sec->AdditiveColors[sector_t::sprites] = CheckInt(key) | 0xff000000;
+					break;
+
+				case NAME_NoSkyWalls:
+					Flag(sec->MoreFlags, SECMF_NOSKYWALLS, key);
 					break;
 
 				case NAME_Desaturation:

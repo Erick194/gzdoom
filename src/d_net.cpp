@@ -66,6 +66,7 @@
 #include "i_time.h"
 #include "vm.h"
 #include "gstrings.h"
+#include "s_music.h"
 
 EXTERN_CVAR (Int, disableautosave)
 EXTERN_CVAR (Int, autosavecount)
@@ -1550,14 +1551,14 @@ bool DoArbitrate (void *userdata)
 	return false;
 }
 
-void D_ArbitrateNetStart (void)
+bool D_ArbitrateNetStart (void)
 {
 	ArbitrateData data;
 	int i;
 
 	// Return right away if we're just playing with ourselves.
 	if (doomcom.numnodes == 1)
-		return;
+		return true;
 
 	autostart = true;
 
@@ -1613,7 +1614,7 @@ void D_ArbitrateNetStart (void)
 	StartScreen->NetInit ("Exchanging game information", 1);
 	if (!StartScreen->NetLoop (DoArbitrate, &data))
 	{
-		exit (0);
+		return false;
 	}
 
 	if (consoleplayer == Net_Arbitrator)
@@ -1630,6 +1631,7 @@ void D_ArbitrateNetStart (void)
 		}
 	}
 	StartScreen->NetDone();
+	return true;
 }
 
 static void SendSetup (uint32_t playersdetected[MAXNETNODES], uint8_t gotsetup[MAXNETNODES], int len)
@@ -1662,7 +1664,7 @@ static void SendSetup (uint32_t playersdetected[MAXNETNODES], uint8_t gotsetup[M
 // Works out player numbers among the net participants
 //
 
-void D_CheckNetGame (void)
+bool D_CheckNetGame (void)
 {
 	const char *v;
 	int i;
@@ -1683,8 +1685,13 @@ void D_CheckNetGame (void)
 			"\nIf the game is running well below expected speeds, use netmode 0 (P2P) instead.\n");
 	}
 
+	int result = I_InitNetwork ();
 	// I_InitNetwork sets doomcom and netgame
-	if (I_InitNetwork ())
+	if (result == -1)
+	{
+		return false;
+	}
+	else if (result > 0)
 	{
 		// For now, stop auto selecting PacketServer, as it's more likely to cause confusion.
 		//NetMode = NET_PacketServer;
@@ -1730,7 +1737,7 @@ void D_CheckNetGame (void)
 	if (netgame)
 	{
 		GameConfig->ReadNetVars ();	// [RH] Read network ServerInfo cvars
-		D_ArbitrateNetStart ();
+		if (!D_ArbitrateNetStart ()) return false;
 	}
 
 	// read values out of doomcom
@@ -1748,6 +1755,8 @@ void D_CheckNetGame (void)
 
 	if (!batchrun) Printf ("player %i of %i (%i nodes)\n",
 			consoleplayer+1, doomcom.numplayers, doomcom.numnodes);
+	
+	return true;
 }
 
 
@@ -2192,7 +2201,7 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 				{
 					Printf (PRINT_CHAT, "%s" TEXTCOLOR_CHAT ": %s" TEXTCOLOR_CHAT "\n", name, s);
 				}
-				S_Sound (CHAN_VOICE | CHAN_UI, gameinfo.chatSound, 1, ATTN_NONE);
+				S_Sound (CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1, ATTN_NONE);
 			}
 			else if (players[player].userinfo.GetTeam() == players[consoleplayer].userinfo.GetTeam())
 			{ // Said only to members of the player's team
@@ -2204,7 +2213,7 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 				{
 					Printf (PRINT_TEAMCHAT, "(%s" TEXTCOLOR_TEAMCHAT "): %s" TEXTCOLOR_TEAMCHAT "\n", name, s);
 				}
-				S_Sound (CHAN_VOICE | CHAN_UI, gameinfo.chatSound, 1, ATTN_NONE);
+				S_Sound (CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1, ATTN_NONE);
 			}
 		}
 		break;
@@ -2415,12 +2424,11 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 							if (type >= DEM_SUMMON2 && type <= DEM_SUMMONFOE2)
 							{
 								spawned->Angles.Yaw = source->Angles.Yaw - angle;
-								spawned->tid = tid;
 								spawned->special = special;
 								for(i = 0; i < 5; i++) {
 									spawned->args[i] = args[i];
 								}
-								if(tid) spawned->AddToHash();
+								if(tid) spawned->SetTID(tid);
 							}
 						}
 					}
@@ -2746,6 +2754,12 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 // Used by DEM_RUNSCRIPT, DEM_RUNSCRIPT2, and DEM_RUNNAMEDSCRIPT
 static void RunScript(uint8_t **stream, AActor *pawn, int snum, int argn, int always)
 {
+	if (pawn == nullptr)
+	{
+		// Scripts can be invoked without a level loaded, e.g. via puke(name) CCMD in fullscreen console
+		return;
+	}
+
 	int arg[4] = { 0, 0, 0, 0 };
 	int i;
 	

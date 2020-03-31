@@ -41,6 +41,10 @@ class MessageBoxMenu : Menu
 	int mMouseLeft, mMouseRight, mMouseY;
 	Name mAction;
 
+	Font textFont, arrowFont;
+	int destWidth, destHeight;
+	String selector;
+
 	native static void CallHandler(voidptr hnd);
 
 
@@ -57,6 +61,13 @@ class MessageBoxMenu : Menu
 		messageSelection = 0;
 		mMouseLeft = 140;
 		mMouseY = 0x80000000;
+
+		textFont = SmallFont;
+		arrowFont = ConFont;
+		destWidth = CleanWidth;
+		destHeight = CleanHeight;
+		selector = "\xd";
+
 		int mr1 = 170 + SmallFont.StringWidth(Stringtable.Localize("$TXT_YES"));
 		int mr2 = 170 + SmallFont.StringWidth(Stringtable.Localize("$TXT_NO"));
 		mMouseRight = MAX(mr1, mr2);
@@ -280,7 +291,7 @@ class MessageBoxMenu : Menu
 			}
 			if (sel != -1 && sel != messageSelection)
 			{
-				//S_Sound (CHAN_VOICE | CHAN_UI, "menu/cursor", snd_menuvolume, ATTN_NONE);
+				//S_Sound (CHAN_VOICE, CHANF_UI, "menu/cursor", snd_menuvolume, ATTN_NONE);
 			}
 			messageSelection = sel;
 			if (type == MOUSE_Release)

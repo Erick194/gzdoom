@@ -32,14 +32,14 @@ class FighterPlayer : PlayerPawn
 		Player.WeaponSlot 4, "FWeapQuietus";
 		
 		Player.ColorRange 246, 254;
-		Player.Colorset		0, "Gold",			246, 254,    253;
-		Player.ColorsetFile 1, "Red",			"TRANTBL0",  0xAC;
-		Player.ColorsetFile 2, "Blue",			"TRANTBL1",  0x9D;
-		Player.ColorsetFile 3, "Dull Green",	"TRANTBL2",  0x3E;
-		Player.ColorsetFile 4, "Green",			"TRANTBL3",  0xC8;
-		Player.ColorsetFile 5, "Gray",			"TRANTBL4",  0x2D;
-		Player.ColorsetFile 6, "Brown",			"TRANTBL5",  0x6F;
-		Player.ColorsetFile 7, "Purple",		"TRANTBL6",  0xEE;
+		Player.Colorset		0, "$TXT_COLOR_GOLD",		246, 254,    253;
+		Player.ColorsetFile 1, "$TXT_COLOR_RED",		"TRANTBL0",  0xAC;
+		Player.ColorsetFile 2, "$TXT_COLOR_BLUE",		"TRANTBL1",  0x9D;
+		Player.ColorsetFile 3, "$TXT_COLOR_DULLGREEN",	"TRANTBL2",  0x3E;
+		Player.ColorsetFile 4, "$TXT_COLOR_GREEN",		"TRANTBL3",  0xC8;
+		Player.ColorsetFile 5, "$TXT_COLOR_GRAY",		"TRANTBL4",  0x2D;
+		Player.ColorsetFile 6, "$TXT_COLOR_BROWN",		"TRANTBL5",  0x6F;
+		Player.ColorsetFile 7, "$TXT_COLOR_PURPLE",		"TRANTBL6",  0xEE;
 	}
 	
 	States
@@ -78,7 +78,7 @@ class FighterPlayer : PlayerPawn
 		PLAY X 1 A_FreezeDeathChunks;
 		Wait;
 	Burn:
-		FDTH A 5 BRIGHT A_PlaySound("*burndeath");
+		FDTH A 5 BRIGHT A_StartSound("*burndeath");
 		FDTH B 4 BRIGHT;
 		FDTH G 5 BRIGHT;
 		FDTH H 4 BRIGHT A_PlayerScream;

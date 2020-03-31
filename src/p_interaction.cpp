@@ -337,7 +337,7 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 
 	if (flags & MF_MISSILE)
 	{ // [RH] When missiles die, they just explode
-		P_ExplodeMissile (this, NULL, NULL);
+		P_ExplodeMissile (this, NULL, NULL, false, MeansOfDeath);
 		return;
 	}
 	// [RH] Set the target to the thing that killed it. Strife apparently does this.
@@ -498,7 +498,7 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 					}
 
 					if (deathmatch &&
-						source->CheckLocalView (consoleplayer) &&
+						source->CheckLocalView() &&
 						cl_showmultikills)
 					{
 						const char *multimsg;
@@ -1016,8 +1016,8 @@ static int DamageMobj (AActor *target, AActor *inflictor, AActor *source, int da
 	}
 	FName MeansOfDeath = mod;
 
-	// Spectral targets only take damage from spectral projectiles.
-	if (target->flags4 & MF4_SPECTRAL && !telefragDamage)
+	// Spectral targets only take damage from spectral projectiles unless forced or telefragging.
+	if ((target->flags4 & MF4_SPECTRAL) && !(flags & DMG_FORCED) && !telefragDamage)
 	{
 		if (inflictor == NULL || !(inflictor->flags4 & MF4_SPECTRAL))
 		{
@@ -1286,7 +1286,7 @@ static int DamageMobj (AActor *target, AActor *inflictor, AActor *source, int da
 				int newdam = damage;
 				if (damage > 0)
 				{
-					newdam = player->mo->AbsorbDamage(damage, mod);
+					newdam = player->mo->AbsorbDamage(damage, mod, inflictor, source, flags);
 				}
 				if (!telefragDamage || (player->mo->flags7 & MF7_LAXTELEFRAGDMG)) //rawdamage is never modified.
 				{
@@ -1356,7 +1356,7 @@ static int DamageMobj (AActor *target, AActor *inflictor, AActor *source, int da
 		if (!(flags & (DMG_NO_ARMOR|DMG_FORCED)) && target->Inventory != NULL && damage > 0)
 		{
 			int newdam = damage;
-			newdam = target->AbsorbDamage(damage, mod);
+			newdam = target->AbsorbDamage(damage, mod, inflictor, source, flags);
 			damage = newdam;
 			if (damage <= 0)
 			{
@@ -1400,7 +1400,7 @@ static int DamageMobj (AActor *target, AActor *inflictor, AActor *source, int da
 				}
 				if (P_GiveBody(source, draindmg))
 				{
-					S_Sound(source, CHAN_ITEM, "*drainhealth", 1, ATTN_NORM);
+					S_Sound(source, CHAN_ITEM, 0, "*drainhealth", 1, ATTN_NORM);
 				}
 			}
 		}

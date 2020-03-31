@@ -97,6 +97,27 @@ FString ZCCCompiler::StringConstFromNode(ZCC_TreeNode *node, PContainerType *cls
 	return static_cast<FxConstant*>(ex)->GetValue().GetString();
 }
 
+ZCC_MixinDef *ZCCCompiler::ResolveMixinStmt(ZCC_MixinStmt *mixinStmt, EZCCMixinType type)
+{
+	for (auto mx : Mixins)
+	{
+		if (mx->mixin->NodeName == mixinStmt->MixinName)
+		{
+			if (mx->mixin->MixinType != type)
+			{
+				Error(mixinStmt, "Mixin %s is a %s mixin cannot be used here.", FName(mixinStmt->MixinName).GetChars(), GetMixinTypeString(type));
+				return nullptr;
+			}
+
+			return mx->mixin;
+		}
+	}
+
+	Error(mixinStmt, "Mixin %s does not exist.", FName(mixinStmt->MixinName).GetChars());
+
+	return nullptr;
+}
+
 
 //==========================================================================
 //
@@ -134,11 +155,102 @@ void ZCCCompiler::ProcessClass(ZCC_Class *cnode, PSymbolTreeNode *treenode)
 	PSymbolTreeNode *childnode;
 	ZCC_Enum *enumType = nullptr;
 
+	// [pbeta] Handle mixins here for the sake of simplifying things.
+	if (node != nullptr)
+	{
+		bool mixinError = false;
+		TArray<ZCC_MixinStmt *> mixinStmts;
+		mixinStmts.Clear();
+
+		// Gather all mixin statement nodes.
+		do
+		{
+			if (node->NodeType == AST_MixinStmt)
+			{
+				mixinStmts.Push(static_cast<ZCC_MixinStmt *>(node));
+			}
+
+			node = node->SiblingNext;
+		}
+		while (node != cnode->Body);
+
+		for (auto mixinStmt : mixinStmts)
+		{
+			ZCC_MixinDef *mixinDef = ResolveMixinStmt(mixinStmt, ZCC_Mixin_Class);
+
+			if (mixinDef == nullptr)
+			{
+				mixinError = true;
+				continue;
+			}
+
+			// Insert the mixin if there's a body. If not, just remove this node.
+			if (mixinDef->Body != nullptr)
+			{
+				auto newNode = TreeNodeDeepCopy(&AST, mixinDef->Body, true);
+
+				if (mixinStmt->SiblingNext != mixinStmt && mixinStmt->SiblingPrev != mixinStmt)
+				{
+					auto prevSibling = mixinStmt->SiblingPrev;
+					auto nextSibling = mixinStmt->SiblingNext;
+
+					auto newFirst = newNode;
+					auto newLast = newNode->SiblingPrev;
+
+					newFirst->SiblingPrev = prevSibling;
+					newLast->SiblingNext = nextSibling;
+
+					prevSibling->SiblingNext = newFirst;
+					nextSibling->SiblingPrev = newLast;
+				}
+
+				if (cnode->Body == mixinStmt)
+				{
+					cnode->Body = newNode;
+				}
+			}
+			else
+			{
+				if (mixinStmt->SiblingNext != mixinStmt && mixinStmt->SiblingPrev != mixinStmt)
+				{
+					auto prevSibling = mixinStmt->SiblingPrev;
+					auto nextSibling = mixinStmt->SiblingNext;
+
+					prevSibling->SiblingNext = nextSibling;
+					nextSibling->SiblingPrev = prevSibling;
+
+					if (cnode->Body == mixinStmt)
+					{
+						cnode->Body = nextSibling;
+					}
+				}
+				else if (cnode->Body == mixinStmt)
+				{
+					cnode->Body = nullptr;
+				}
+			}
+		}
+
+		mixinStmts.Clear();
+
+		if (mixinError)
+		{
+			return;
+		}
+	}
+
+	node = cnode->Body;
+
 	// Need to check if the class actually has a body.
 	if (node != nullptr) do
 	{
 		switch (node->NodeType)
 		{
+		case AST_MixinStmt:
+			assert(0 && "Unhandled mixin statement in class parsing loop. If this has been reached, something is seriously wrong");
+			Error(node, "Internal mixin error.");
+			break;
+
 		case AST_Struct:
 		case AST_ConstantDef:
 		case AST_Enum:
@@ -210,9 +322,54 @@ void ZCCCompiler::ProcessClass(ZCC_Class *cnode, PSymbolTreeNode *treenode)
 			assert(0 && "Unhandled AST node type");
 			break;
 		}
+
 		node = node->SiblingNext;
 	}
 	while (node != cnode->Body);
+}
+
+//==========================================================================
+//
+// ZCCCompiler :: ProcessMixin
+//
+//==========================================================================
+
+void ZCCCompiler::ProcessMixin(ZCC_MixinDef *cnode, PSymbolTreeNode *treenode)
+{
+	ZCC_MixinWork *cls = new ZCC_MixinWork(cnode, treenode);
+
+	auto node = cnode->Body;
+
+	// Need to check if the mixin actually has a body.
+	if (node != nullptr) do
+	{
+		if (cnode->MixinType == ZCC_Mixin_Class)
+		{
+			switch (node->NodeType)
+			{
+			case AST_Struct:
+			case AST_ConstantDef:
+			case AST_Enum:
+			case AST_Property:
+			case AST_FlagDef:
+			case AST_VarDeclarator:
+			case AST_EnumTerminator:
+			case AST_States:
+			case AST_FuncDeclarator:
+			case AST_Default:
+			case AST_StaticArrayStatement:
+				break;
+
+			default:
+				assert(0 && "Unhandled AST node type");
+				break;
+			}
+		}
+
+		node = node->SiblingNext;
+	} while (node != cnode->Body);
+
+	Mixins.Push(cls);
 }
 
 //==========================================================================
@@ -300,6 +457,28 @@ ZCCCompiler::ZCCCompiler(ZCC_AST &ast, DObject *_outer, PSymbolTable &_symbols, 
 	{
 		ZCC_TreeNode *node = ast.TopNode;
 		PSymbolTreeNode *tnode;
+
+		// [pbeta] Anything that must be processed before classes, structs, etc. should go here.
+		do
+		{
+			switch (node->NodeType)
+			{
+			// [pbeta] Mixins must be processed before everything else.
+			case AST_MixinDef:
+				if ((tnode = AddTreeNode(static_cast<ZCC_NamedNode *>(node)->NodeName, node, GlobalTreeNodes)))
+				{
+					ProcessMixin(static_cast<ZCC_MixinDef *>(node), tnode);
+					break;
+				}
+				break;
+
+			default:
+				break; // Shut GCC up.
+			}
+			node = node->SiblingNext;
+		} while (node != ast.TopNode);
+
+		node = ast.TopNode;
 		PType *enumType = nullptr;
 		ZCC_Enum *zenumType = nullptr;
 
@@ -307,6 +486,10 @@ ZCCCompiler::ZCCCompiler(ZCC_AST &ast, DObject *_outer, PSymbolTable &_symbols, 
 		{
 			switch (node->NodeType)
 			{
+			case AST_MixinDef:
+				// [pbeta] We already processed mixins, ignore them here.
+				break;
+
 			case AST_Class:
 				// a class extension should not check the tree node symbols.
 				if (static_cast<ZCC_Class *>(node)->Flags == ZCC_Extension)
@@ -1319,6 +1502,8 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 					}
 				}
 				
+				PField *f = nullptr;
+
 				if (varflags & VARF_Native)
 				{
 					if (varflags & VARF_Meta)
@@ -1343,19 +1528,14 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 						{
 							// for bit fields the type must point to the source variable.
 							if (fd->BitValue != 0) thisfieldtype = fd->FieldSize == 1 ? TypeUInt8 : fd->FieldSize == 2 ? TypeUInt16 : TypeUInt32;
-							auto f = type->AddNativeField(name->Name, thisfieldtype, fd->FieldOffset, varflags, fd->BitValue);
-							if (field->Flags & (ZCC_Version | ZCC_Deprecated)) f->mVersion = field->Version;
+							f = type->AddNativeField(name->Name, thisfieldtype, fd->FieldOffset, varflags, fd->BitValue);
 						}
 						else
 						{
 
 							// This is a global variable.
 							if (fd->BitValue != 0) thisfieldtype = fd->FieldSize == 1 ? TypeUInt8 : fd->FieldSize == 2 ? TypeUInt16 : TypeUInt32;
-							PField *f = Create<PField>(name->Name, thisfieldtype, varflags | VARF_Native | VARF_Static, fd->FieldOffset, fd->BitValue);
-							if (f->Flags & (ZCC_Version | ZCC_Deprecated))
-							{
-								f->mVersion = field->Version;
-							}
+							f = Create<PField>(name->Name, thisfieldtype, varflags | VARF_Native | VARF_Static, fd->FieldOffset, fd->BitValue);
 
 							if (OutNamespace->Symbols.AddSymbol(f) == nullptr)
 							{ // name is already in use
@@ -1371,8 +1551,17 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 				}
 				else
 				{
-					auto f = type->AddField(name->Name, thisfieldtype, varflags);
-					if (field->Flags & (ZCC_Version | ZCC_Deprecated)) f->mVersion = field->Version;
+					f = type->AddField(name->Name, thisfieldtype, varflags);
+				}
+
+				if ((field->Flags & (ZCC_Version | ZCC_Deprecated)) && f != nullptr)
+				{
+					f->mVersion = field->Version;
+
+					if (field->DeprecationMessage != nullptr)
+					{
+						f->DeprecationMessage = *field->DeprecationMessage;
+					}
 				}
 			}
 			name = static_cast<ZCC_VarName*>(name->SiblingNext);
@@ -1492,7 +1681,7 @@ bool ZCCCompiler::CompileFlagDefs(PClass *type, TArray<ZCC_FlagDef *> &Propertie
 				{
 					Error(p, "Variable %s not found in %s", referenced.GetChars(), type->TypeName.GetChars());
 				}
-				if (!field->Type->isInt() || field->Type->Size != 4)
+				else if (!field->Type->isInt() || field->Type->Size != 4)
 				{
 					Error(p, "Variable %s in %s must have a size of 4 bytes for use as flag storage", referenced.GetChars(), type->TypeName.GetChars());
 				}
@@ -2747,6 +2936,11 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 		sym->AddVariant(NewPrototype(rets, args), argflags, argnames, afd == nullptr ? nullptr : *(afd->VMPointer), varflags, useflags);
 		c->Type()->Symbols.ReplaceSymbol(sym);
 
+		if (f->DeprecationMessage != nullptr)
+		{
+			sym->Variants[0].DeprecationMessage = *f->DeprecationMessage;
+		}
+
 		auto vcls = PType::toClass(c->Type());
 		auto cls = vcls ? vcls->Descriptor : nullptr;
 		PFunction *virtsym = nullptr;
@@ -2980,6 +3174,11 @@ FxExpression *ZCCCompiler::SetupActionFunction(PClass *cls, ZCC_TreeNode *af, in
 					int comboflags = afd->Variants[0].UseFlags & StateFlags;
 					if (comboflags == StateFlags)	// the function must satisfy all the flags the state requires
 					{
+						if ((afd->Variants[0].Flags & VARF_Private) && afd->OwningClass != cls->VMType)
+						{
+							Error(af, "%s is declared private and not accessible", FName(id->Identifier).GetChars());
+						}
+						
 						return new FxVMFunctionCall(new FxSelf(*af), afd, argumentlist, *af, false);
 					}
 					else
@@ -3201,7 +3400,6 @@ void ZCCCompiler::CompileStates()
 					if (!statedef.SetWait())
 					{
 						Error(st, "%s before first state", st->NodeType == AST_StateFail ? "Fail" : "Wait");
-						continue;
 					}
 					break;
 
@@ -3209,7 +3407,6 @@ void ZCCCompiler::CompileStates()
 					if (!statedef.SetLoop())
 					{
 						Error(st, "LOOP before first state");
-						continue;
 					}
 					break;
 

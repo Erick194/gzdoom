@@ -45,6 +45,7 @@
 #ifndef __GNUC__
 #define INITGUID
 #endif
+#define DIRECTINPUT_VERSION 0x800
 #include <windows.h>
 #include <dbt.h>
 #include <dinput.h>
@@ -89,13 +90,7 @@
 #include "v_text.h"
 #include "version.h"
 #include "events.h"
-
-// Prototypes and declarations.
-#include "rawinput.h"
-// Definitions
-#define RIF(name, ret, args) \
-	name##Proto My##name;
-#include "rawinput.h"
+#include "doomerrors.h"
 
 
 // Compensate for w32api's lack
@@ -111,7 +106,6 @@
 #define INGAME_PRIORITY_CLASS	NORMAL_PRIORITY_CLASS
 #endif
 
-static void FindRawInputFunctions();
 FJoystickCollection *JoyDevices[NUM_JOYDEVICES];
 
 
@@ -150,11 +144,6 @@ int BlockMouseMove;
 
 CVAR (Bool, i_soundinbackground, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR (Bool, k_allowfullscreentoggle, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
-
-CUSTOM_CVAR(Bool, norawinput, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOINITCALL)
-{
-	Printf("This won't take effect until " GAMENAME " is restarted.\n");
-}
 
 extern int chatmodeon;
 
@@ -376,25 +365,22 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	if (message == WM_INPUT)
 	{
-		if (MyGetRawInputData != NULL)
-		{
-			UINT size;
+		UINT size;
 
-			if (!MyGetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER)) &&
-				size != 0)
+		if (!GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER)) &&
+			size != 0)
+		{
+			uint8_t *buffer = (uint8_t *)alloca(size);
+			if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, buffer, &size, sizeof(RAWINPUTHEADER)) == size)
 			{
-				uint8_t *buffer = (uint8_t *)alloca(size);
-				if (MyGetRawInputData((HRAWINPUT)lParam, RID_INPUT, buffer, &size, sizeof(RAWINPUTHEADER)) == size)
+				int code = GET_RAWINPUT_CODE_WPARAM(wParam);
+				if (Keyboard == NULL || !Keyboard->ProcessRawInput((RAWINPUT *)buffer, code))
 				{
-					int code = GET_RAWINPUT_CODE_WPARAM(wParam);
-					if (Keyboard == NULL || !Keyboard->ProcessRawInput((RAWINPUT *)buffer, code))
+					if (Mouse == NULL || !Mouse->ProcessRawInput((RAWINPUT *)buffer, code))
 					{
-						if (Mouse == NULL || !Mouse->ProcessRawInput((RAWINPUT *)buffer, code))
+						if (JoyDevices[INPUT_RawPS2] != NULL)
 						{
-							if (JoyDevices[INPUT_RawPS2] != NULL)
-							{
-								JoyDevices[INPUT_RawPS2]->ProcessRawInput((RAWINPUT *)buffer, code);
-							}
+							JoyDevices[INPUT_RawPS2]->ProcessRawInput((RAWINPUT *)buffer, code);
 						}
 					}
 				}
@@ -436,8 +422,7 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_DESTROY:
 		SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-		//PostQuitMessage (0);
-		exit (0);
+		PostQuitMessage (0);
 		break;
 
 	case WM_HOTKEY:
@@ -625,13 +610,10 @@ bool I_InitInput (void *hwnd)
 	HRESULT hr;
 
 	Printf ("I_InitInput\n");
-	atterm (I_ShutdownInput);
 
 	noidle = !!Args->CheckParm ("-noidle");
 	g_pdi = NULL;
 	g_pdi3 = NULL;
-
-	FindRawInputFunctions();
 
 	// Try for DirectInput 8 first, then DirectInput 3 for NT 4's benefit.
 	DInputDLL = LoadLibraryA("dinput8.dll");
@@ -641,7 +623,7 @@ bool I_InitInput (void *hwnd)
 		blah di8c = (blah)GetProcAddress(DInputDLL, "DirectInput8Create");
 		if (di8c != NULL)
 		{
-			hr = di8c(g_hInst, DIRECTINPUT_VERSION, IID_IDirectInput8A, (void **)&g_pdi, NULL);
+			hr = di8c(g_hInst, DIRECTINPUT_VERSION, IID_IDirectInput8, (void **)&g_pdi, NULL);
 			if (FAILED(hr))
 			{
 				Printf(TEXTCOLOR_ORANGE "DirectInput8Create failed: %08lx\n", hr);
@@ -667,7 +649,11 @@ bool I_InitInput (void *hwnd)
 		}
 
 		typedef HRESULT (WINAPI *blah)(HINSTANCE, DWORD, LPDIRECTINPUT*, LPUNKNOWN);
-		blah dic = (blah)GetProcAddress (DInputDLL, "DirectInputCreateA");
+#ifdef UNICODE
+		blah dic = (blah)GetProcAddress (DInputDLL, "DirectInputCreateW");
+#else
+		blah dic = (blah)GetProcAddress(DInputDLL, "DirectInputCreateA");
+#endif
 
 		if (dic == NULL)
 		{
@@ -749,7 +735,7 @@ void I_GetEvent ()
 	while (PeekMessage (&mess, NULL, 0, 0, PM_REMOVE))
 	{
 		if (mess.message == WM_QUIT)
-			exit (mess.wParam);
+			throw CExitEvent(mess.wParam);
 
 		if (GUICapture)
 		{
@@ -942,26 +928,3 @@ bool FInputDevice::WndProcHook(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 	return false;
 }
 
-//==========================================================================
-//
-// FindRawInputFunctions
-//
-// Finds functions for raw input, if available.
-//
-//==========================================================================
-
-static void FindRawInputFunctions()
-{
-	if (!norawinput)
-	{
-		HMODULE user32 = GetModuleHandleA("user32.dll");
-
-		if (user32 == NULL)
-		{
-			return;		// WTF kind of broken system are we running on?
-		}
-#define RIF(name,ret,args) \
-		My##name = (name##Proto)GetProcAddress(user32, #name);
-#include "rawinput.h"
-	}
-}

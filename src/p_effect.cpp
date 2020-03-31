@@ -321,32 +321,6 @@ void P_SpawnParticle(const DVector3 &pos, const DVector3 &vel, const DVector3 &a
 }
 
 //
-// P_RunEffects
-//
-// Run effects on all actors in the world
-//
-void P_RunEffects ()
-{
-	if (players[consoleplayer].camera == NULL) return;
-
-	int	pnum = players[consoleplayer].camera->Sector->Index() * level.sectors.Size();
-
-	AActor *actor;
-	TThinkerIterator<AActor> iterator;
-
-	while ( (actor = iterator.Next ()) )
-	{
-		if (actor->effects || actor->fountaincolor)
-		{
-			// Only run the effect if the actor is potentially visible
-			int rnum = pnum + actor->Sector->Index();
-			if (level.rejectmatrix.Size() == 0 || !(level.rejectmatrix[rnum>>3] & (1 << (rnum & 7))))
-				P_RunEffect (actor, actor->effects);
-		}
-	}
-}
-
-//
 // JitterParticle
 //
 // Creates a particle with "jitter"
@@ -691,7 +665,7 @@ void P_DrawRailTrail(AActor *source, TArray<SPortalHit> &portalhits, int color1,
 
 			if (fabs(mo->X() - trail[0].start.X) < 20 && fabs(mo->Y() - trail[0].start.Y) < 20)
 			{ // This player (probably) fired the railgun
-				S_Sound (mo, CHAN_WEAPON, sound, 1, ATTN_NORM);
+				S_Sound (mo, CHAN_WEAPON, 0, sound, 1, ATTN_NORM);
 			}
 			else
 			{
@@ -700,7 +674,7 @@ void P_DrawRailTrail(AActor *source, TArray<SPortalHit> &portalhits, int color1,
 				{
 					if (shortest == NULL || shortest->sounddist > seg.sounddist) shortest = &seg;
 				}
-				S_Sound (DVector3(shortest->soundpos, r_viewpoint.Pos.Z), CHAN_WEAPON, sound, 1, ATTN_NORM);
+				S_Sound (DVector3(shortest->soundpos, r_viewpoint.Pos.Z), CHAN_WEAPON, 0, sound, 1, ATTN_NORM);
 			}
 		}
 	}

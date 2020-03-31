@@ -90,6 +90,7 @@
 #include "p_acs.h"
 #include "events.h"
 #include "gstrings.h"
+#include "s_music.h"
 
 static FRandom pr_skullpop ("SkullPop");
 
@@ -389,7 +390,6 @@ void player_t::CopyFrom(player_t &p, bool copyPSP)
 		psprites = p.psprites;
 		p.psprites = nullptr;
 	}
-	else psprites = nullptr;
 }
 
 size_t player_t::PropagateMark()
@@ -460,9 +460,9 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, SetLogNumber)
 
 void player_t::SetLogText (const char *text)
 {
-	LogText = text;
+	 LogText = text;
 
-	if (mo && mo->CheckLocalView(consoleplayer))
+	if (mo && mo->CheckLocalView())
 	{
 		// Print log text to console
 		AddToConsole(-1, TEXTCOLOR_GOLD);
@@ -478,6 +478,34 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, SetLogText)
 	self->SetLogText(log);
 	return 0;
 }
+
+void player_t::SetSubtitle(int num, FSoundID soundid)
+{
+	char lumpname[36];
+
+	if (gameinfo.flags & GI_SHAREWARE) return;	// Subtitles are only for the full game.
+
+	// Do we have a subtitle for this log entry's voice file?
+	mysnprintf(lumpname, countof(lumpname), "$TXT_SUB_LOG%d", num);
+	auto text = GStrings.GetLanguageString(lumpname+1, FStringTable::default_table);
+	if (text != nullptr)
+	{
+		SubtitleText = lumpname;
+		int sl = soundid == 0 ? 7000 : std::max<int>(7000, S_GetMSLength(soundid));
+		SubtitleCounter = sl * TICRATE / 1000;
+	}
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, SetSubtitleNumber)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	PARAM_INT(log);
+	PARAM_SOUND(soundid);
+	self->SetSubtitle(log, soundid);
+	return 0;
+}
+
+
 
 int player_t::GetSpawnClass()
 {
@@ -905,11 +933,11 @@ DEFINE_ACTION_FUNCTION(AActor, A_PlayerScream)
 	{
 		if (self->DeathSound != 0)
 		{
-			S_Sound (self, CHAN_VOICE, self->DeathSound, 1, ATTN_NORM);
+			S_Sound (self, CHAN_VOICE, 0, self->DeathSound, 1, ATTN_NORM);
 		}
 		else
 		{
-			S_Sound (self, CHAN_VOICE, "*death", 1, ATTN_NORM);
+			S_Sound (self, CHAN_VOICE, 0, "*death", 1, ATTN_NORM);
 		}
 		return 0;
 	}
@@ -959,7 +987,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_PlayerScream)
 			}
 		}
 	}
-	S_Sound (self, chan, sound, 1, ATTN_NORM);
+	S_Sound (self, chan, 0, sound, 1, ATTN_NORM);
 	return 0;
 }
 
@@ -987,7 +1015,7 @@ void P_CheckPlayerSprite(AActor *actor, int &spritenum, DVector2 &scale)
 	}
 
 	// Set the crouch sprite?
-	if (player->crouchfactor < 0.75)
+	if (player->mo == actor && player->crouchfactor < 0.75)
 	{
 		int crouchsprite = player->mo->IntVar(NAME_crouchsprite);
 		if (spritenum == actor->SpawnState->sprite || spritenum == crouchsprite) 
@@ -1107,7 +1135,7 @@ void P_FallingDamage (AActor *actor)
 
 	if (actor->player)
 	{
-		S_Sound (actor, CHAN_AUTO, "*land", 1, ATTN_NORM);
+		S_Sound (actor, CHAN_AUTO, 0, "*land", 1, ATTN_NORM);
 		P_NoiseAlert (actor, actor, true);
 		if (damage >= TELEFRAG_DAMAGE && ((actor->player->cheats & (CF_GODMODE | CF_BUDDHA) ||
 			(actor->FindInventory(PClass::FindActor(NAME_PowerBuddha), true) != nullptr))))
@@ -1183,7 +1211,7 @@ void P_CheckEnvironment(player_t *player)
 		int id = S_FindSkinnedSound(player->mo, "*falling");
 		if (id != 0 && !S_IsActorPlayingSomething(player->mo, CHAN_VOICE, id))
 		{
-			S_Sound(player->mo, CHAN_VOICE, id, 1, ATTN_NORM);
+			S_Sound(player->mo, CHAN_VOICE, 0, id, 1, ATTN_NORM);
 		}
 	}
 }
@@ -1242,6 +1270,11 @@ void P_PlayerThink (player_t *player)
 	if (player->mo == NULL)
 	{
 		I_Error ("No player %td start\n", player - players + 1);
+	}
+
+	if (player->SubtitleCounter > 0)
+	{
+		player->SubtitleCounter--;
 	}
 
 	// Bots do not think in freeze mode.
@@ -1675,6 +1708,8 @@ void player_t::Serialize(FSerializer &arc)
 		("blenda", BlendA)
 		("weaponstate", WeaponState)
 		("logtext", LogText)
+		("subtitletext", SubtitleText)
+		("subtitlecounter", SubtitleCounter)
 		("conversionnpc", ConversationNPC)
 		("conversionpc", ConversationPC)
 		("conversionnpcangle", ConversationNPCAngle)

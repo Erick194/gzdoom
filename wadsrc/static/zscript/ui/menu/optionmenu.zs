@@ -106,7 +106,24 @@ class OptionMenu : Menu
 		mParentMenu = parent;
 		mDesc = desc;
 		DontDim = desc.mDontDim;
-		if (mDesc != NULL && mDesc.mSelectedItem == -1) mDesc.mSelectedItem = FirstSelectable();
+
+		let itemCount = mDesc.mItems.size();
+		if (itemCount > 0)
+		{
+			let last = mDesc.mItems[itemCount - 1];
+			bool lastIsText = (last is "OptionMenuItemStaticText");
+			if (lastIsText)
+			{
+				String text = last.mLabel;
+				bool lastIsSpace = (text == "" || text == " ");
+				if (lastIsSpace)
+				{
+					mDesc.mItems.Pop();
+				}
+			}
+		}
+
+		if (mDesc.mSelectedItem == -1) mDesc.mSelectedItem = FirstSelectable();
 		mDesc.CalcIndent();
 
 		// notify all items that the menu was just created.
@@ -142,18 +159,15 @@ class OptionMenu : Menu
 
 	int FirstSelectable()
 	{
-		if (mDesc != NULL)
+		// Go down to the first selectable item
+		int i = -1;
+		do
 		{
-			// Go down to the first selectable item
-			int i = -1;
-			do
-			{
-				i++;
-			}
-			while (i < mDesc.mItems.Size() && !mDesc.mItems[i].Selectable());
-			if (i>=0 && i < mDesc.mItems.Size()) return i;
+			i++;
 		}
-		return -1;
+		while (i < mDesc.mItems.Size() && !mDesc.mItems[i].Selectable());
+		if (i>=0 && i < mDesc.mItems.Size()) return i;
+		else return -1;
 	}
 
 	//=============================================================================
@@ -378,7 +392,7 @@ class OptionMenu : Menu
 				if (yline != mDesc.mSelectedItem)
 				{
 					mDesc.mSelectedItem = yline;
-					//S_Sound (CHAN_VOICE | CHAN_UI, "menu/cursor", snd_menuvolume, ATTN_NONE);
+					//S_Sound (CHAN_VOICE, CHANF_UI, "menu/cursor", snd_menuvolume, ATTN_NONE);
 				}
 				mDesc.mItems[yline].MouseEvent(type, x, y);
 				return true;
@@ -410,6 +424,27 @@ class OptionMenu : Menu
 	//
 	//=============================================================================
 
+	virtual int GetIndent()
+	{
+		int indent = mDesc.mIndent;
+		if (indent > 280)
+		{ // kludge for the compatibility options with their extremely long labels
+			if (indent + 40 <= CleanWidth_1)
+			{
+				indent = (screen.GetWidth() - ((indent + 40) * CleanXfac_1)) / 2 + indent * CleanXfac_1;
+			}
+			else
+			{
+				indent = screen.GetWidth() - 40 * CleanXfac_1;
+			}
+		}
+		else
+		{
+			indent = (indent - 160) * CleanXfac_1 + screen.GetWidth() / 2;
+		}
+		return indent;
+	}
+
 	override void Drawer ()
 	{
 		int y = mDesc.mPosition;
@@ -433,22 +468,7 @@ class OptionMenu : Menu
 		int fontheight = OptionMenuSettings.mLinespacing * CleanYfac_1;
 		y *= CleanYfac_1;
 
-		int indent = mDesc.mIndent;
-		if (indent > 280)
-		{ // kludge for the compatibility options with their extremely long labels
-			if (indent + 40 <= CleanWidth_1)
-			{
-				indent = (screen.GetWidth() - ((indent + 40) * CleanXfac_1)) / 2 + indent * CleanXfac_1;
-			}
-			else
-			{
-				indent = screen.GetWidth() - 40 * CleanXfac_1;
-			}
-		}
-		else
-		{
-			indent = (indent - 160) * CleanXfac_1 + screen.GetWidth() / 2;
-		}
+		int indent = GetIndent();
 
 		int ytop = y + mDesc.mScrollTop * 8 * CleanYfac_1;
 		int lastrow = screen.GetHeight() - SmallFont.GetHeight() * CleanYfac_1;

@@ -87,6 +87,7 @@
 #include "actorinlines.h"
 #include "i_time.h"
 #include "p_maputl.h"
+#include "s_music.h"
 
 void STAT_StartNewGame(const char *lev);
 void STAT_ChangeLevel(const char *newl);
@@ -128,7 +129,7 @@ CUSTOM_CVAR(Int, gl_lightmode, 3, CVAR_ARCHIVE | CVAR_NOINITCALL)
 	else if (newself > 4) newself = 8;
 	else if (newself < 0) newself = 0;
 	if (self != newself) self = newself;
-	else if ((level.info == nullptr || level.info->lightmode == -1)) level.lightmode = self;
+	else if ((level.info == nullptr || level.info->lightmode == ELightMode::NotSet)) level.lightmode = (ELightMode)*self;
 }
 
 
@@ -454,6 +455,7 @@ void G_InitNew (const char *mapname, bool bTitleLevel)
 	UnlatchCVars ();
 	G_VerifySkill();
 	UnlatchCVars ();
+	bglobal.freeze = bglobal.changefreeze = 0;
 	DThinker::DestroyThinkersInList(STAT_STATIC);
 
 	if (paused)
@@ -720,10 +722,27 @@ void G_ExitLevel (int position, bool keepFacing)
 	G_ChangeLevel(G_GetExitMap(), position, keepFacing ? CHANGELEVEL_KEEPFACING : 0);
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, ExitLevel, G_ExitLevel)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(position);
+	PARAM_INT(keepFacing);
+	G_ExitLevel(position, keepFacing);
+	return 0;
+}
+
 void G_SecretExitLevel (int position) 
 {
 	level.flags3 |= LEVEL3_EXITSECRETUSED;
 	G_ChangeLevel(G_GetSecretExitMap(), position, 0);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, SecretExitLevel, G_SecretExitLevel)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(position);
+	G_SecretExitLevel(position);
+	return 0;
 }
 
 //==========================================================================
@@ -755,13 +774,17 @@ void G_DoCompleted (void)
 
 	// [RH] Mark this level as having been visited
 	if (!(level.flags & LEVEL_CHANGEMAPCHEAT))
-		FindLevelInfo (level.MapName)->flags |= LEVEL_VISITED;
+		level.info->flags |= LEVEL_VISITED;
 
 	if (automapactive)
 		AM_Stop ();
 
+	S_StopAllChannels();
+	SN_StopAllSequences();
+
 	wminfo.finished_ep = level.cluster - 1;
 	wminfo.LName0 = TexMan.CheckForTexture(level.info->PName, ETextureType::MiscPatch);
+	if (!(level.info->flags3 & LEVEL3_HIDEAUTHORNAME)) wminfo.thisauthor = level.info->AuthorName;
 	wminfo.current = level.MapName;
 
 	if (deathmatch &&
@@ -770,6 +793,7 @@ void G_DoCompleted (void)
 	{
 		wminfo.next = level.MapName;
 		wminfo.LName1 = wminfo.LName0;
+		wminfo.nextauthor = wminfo.thisauthor;
 	}
 	else
 	{
@@ -778,11 +802,13 @@ void G_DoCompleted (void)
 		{
 			wminfo.next = nextlevel;
 			wminfo.LName1.SetInvalid();
+			wminfo.nextauthor = "";
 		}
 		else
 		{
 			wminfo.next = nextinfo->MapName;
 			wminfo.LName1 = TexMan.CheckForTexture(nextinfo->PName, ETextureType::MiscPatch);
+			if (!(nextinfo->flags3 & LEVEL3_HIDEAUTHORNAME)) wminfo.nextauthor = nextinfo->AuthorName;
 		}
 	}
 
@@ -1024,6 +1050,14 @@ void G_DoLoadLevel (int position, bool autosave, bool newGame)
 		P_StartLightning ();
 	}
 
+	TThinkerIterator<AActor> it;
+	AActor* ac;
+	// Initial setup of the dynamic lights.
+	while ((ac = it.Next()))
+	{
+		ac->SetDynamicLights();
+	}
+
 	gameaction = ga_nothing; 
 
 	// clear cmd building stuff
@@ -1172,7 +1206,7 @@ void G_WorldDone (void)
 				ext->mDefined & FExitText::DEF_LOOKUP,
 				true, endsequence);
 		}
-		else
+		else if (!(level.flags2 & LEVEL2_NOCLUSTERTEXT))
 		{
 			F_StartFinale(thiscluster->MessageMusic, thiscluster->musicorder,
 				thiscluster->cdtrack, thiscluster->cdid,
@@ -1183,7 +1217,7 @@ void G_WorldDone (void)
 				true, endsequence);
 		}
 	}
-	else
+	else if (!deathmatch)
 	{
 		FExitText *ext = nullptr;
 		
@@ -1210,7 +1244,7 @@ void G_WorldDone (void)
 
 		nextcluster = FindClusterInfo (FindLevelInfo (nextlevel)->cluster);
 
-		if (nextcluster->cluster != level.cluster && !deathmatch)
+		if (nextcluster->cluster != level.cluster && !(level.flags2 & LEVEL2_NOCLUSTERTEXT))
 		{
 			// Only start the finale if the next level's cluster is different
 			// than the current one and we're not in deathmatch.
@@ -1296,7 +1330,7 @@ void G_StartTravel ()
 			{
 				pawn->UnlinkFromWorld (nullptr);
 				int tid = pawn->tid;	// Save TID
-				pawn->RemoveFromHash ();
+				pawn->SetTID(0);
 				pawn->tid = tid;		// Restore TID (but no longer linked into the hash chain)
 				pawn->ChangeStatNum (STAT_TRAVELLING);
 				pawn->DeleteAttachedLights();
@@ -1408,7 +1442,9 @@ int G_FinishTravel ()
 		}
 		pawn->LinkToWorld (nullptr);
 		pawn->ClearInterpolation();
-		pawn->AddToHash ();
+		const int tid = pawn->tid;	// Save TID (actor isn't linked into the hash chain yet)
+		pawn->tid = 0;				// Reset TID
+		pawn->SetTID(tid);			// Set TID (and link actor into the hash chain)
 		pawn->SetState(pawn->SpawnState);
 		pawn->player->SendPitchLimits();
 
@@ -1457,6 +1493,7 @@ void G_InitLevelLocals ()
 	level.flags = 0;
 	level.flags2 = 0;
 	level.flags3 = 0;
+	level.frozenstate = 0;
 
 	info = FindLevelInfo (level.MapName);
 
@@ -1514,6 +1551,7 @@ void G_InitLevelLocals ()
 	level.NextMap = info->NextMap;
 	level.NextSecretMap = info->NextSecretMap;
 	level.F1Pic = info->F1Pic;
+	level.AuthorName = info->AuthorName;
 	level.hazardcolor = info->hazardcolor;
 	level.hazardflash = info->hazardflash;
 	
@@ -1530,7 +1568,7 @@ void G_InitLevelLocals ()
 
 	level.DefaultEnvironment = info->DefaultEnvironment;
 
-	level.lightmode = info->lightmode < 0? gl_lightmode : info->lightmode;
+	level.lightmode = info->lightmode == ELightMode::NotSet? (ELightMode)*gl_lightmode : info->lightmode;
 	level.brightfog = info->brightfog < 0? gl_brightfog : !!info->brightfog;
 	level.lightadditivesurfaces = info->lightadditivesurfaces < 0 ? gl_lightadditivesurfaces : !!info->lightadditivesurfaces;
 	level.notexturefill = info->notexturefill < 0 ? gl_notexturefill : !!info->notexturefill;
@@ -2032,6 +2070,12 @@ void FLevelLocals::SetMusicVolume(float f)
 	I_SetMusicVolume(f);
 }
 
+void FLevelLocals::SetMusic()
+{
+	if (cdtrack == 0 || !S_ChangeCDMusic(cdtrack, cdid))
+		S_ChangeMusic(Music, musicorder);
+}
+
 //==========================================================================
 // IsPointInMap
 //
@@ -2201,3 +2245,4 @@ DEFINE_ACTION_FUNCTION(FLevelLocals, StartIntermission)
 	F_StartIntermission(seq, (uint8_t)state);
 	return 0;
 }
+

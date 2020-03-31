@@ -126,6 +126,10 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 					sc.MustGetString();
 					iwad->MapInfo = sc.String;
 				}
+				else if (sc.Compare("NoKeyboardCheats"))
+				{
+					iwad->nokeyboardcheats = true;
+				}
 				else if (sc.Compare("Compatibility"))
 				{
 					sc.MustGetStringName("=");
@@ -173,6 +177,13 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 					sc.MustGetStringName(",");
 					sc.MustGetString();
 					iwad->BkColor = V_GetColor(NULL, sc);
+				}
+				else if (sc.Compare("IgnoreTitlePatches"))
+				{
+					sc.MustGetStringName("=");
+					sc.MustGetNumber();
+					if (sc.Number) iwad->flags |= GI_IGNORETITLEPATCHES;
+					else iwad->flags &= ~GI_IGNORETITLEPATCHES;
 				}
 				else if (sc.Compare("Load"))
 				{
@@ -255,9 +266,9 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 //
 //==========================================================================
 
-FIWadManager::FIWadManager(const char *fn)
+FIWadManager::FIWadManager(const char *fn, const char *optfn)
 {
-	FResourceFile *resfile = FResourceFile::OpenResourceFile(fn, true);
+	FResourceFile *resfile = FResourceFile::OpenResourceFile(optfn, true);
 	if (resfile != NULL)
 	{
 		uint32_t cnt = resfile->LumpCount();
@@ -273,10 +284,10 @@ FIWadManager::FIWadManager(const char *fn)
 			}
 		}
 		delete resfile;
-	}
-	if (mIWadNames.Size() == 0 || mIWadInfos.Size() == 0)
-	{
-		I_FatalError("No IWAD definitions found");
+		if (mIWadNames.Size() == 0 || mIWadInfos.Size() == 0)
+		{
+			I_FatalError("No IWAD definitions found");
+		}
 	}
 }
 
@@ -719,7 +730,7 @@ int FIWadManager::IdentifyVersion (TArray<FString> &wadfiles, const char *iwad, 
 				}
 				else
 				{
-					exit(0);
+					return -1;
 				}
 				havepicked = true;
 			}
@@ -774,6 +785,7 @@ int FIWadManager::IdentifyVersion (TArray<FString> &wadfiles, const char *iwad, 
 const FIWADInfo *FIWadManager::FindIWAD(TArray<FString> &wadfiles, const char *iwad, const char *basewad, const char *optionalwad)
 {
 	int iwadType = IdentifyVersion(wadfiles, iwad, basewad, optionalwad);
+	if (iwadType == -1) return nullptr;
 	//gameiwad = iwadType;
 	const FIWADInfo *iwad_info = &mIWadInfos[iwadType];
 	if (DoomStartupInfo.Name.IsEmpty()) DoomStartupInfo.Name = iwad_info->Name;

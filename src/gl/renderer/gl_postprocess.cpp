@@ -1,27 +1,25 @@
-// 
-//---------------------------------------------------------------------------
-//
-// Copyright(C) 2016 Magnus Norddahl
-// All rights reserved.
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//--------------------------------------------------------------------------
-//
 /*
-** gl_postprocess.cpp
-** Post processing effects in the render pipeline
+**  Postprocessing framework
+**  Copyright (c) 2016-2020 Magnus Norddahl
+**
+**  This software is provided 'as-is', without any express or implied
+**  warranty.  In no event will the authors be held liable for any damages
+**  arising from the use of this software.
+**
+**  Permission is granted to anyone to use this software for any purpose,
+**  including commercial applications, and to alter it and redistribute it
+**  freely, subject to the following restrictions:
+**
+**  1. The origin of this software must not be misrepresented; you must not
+**     claim that you wrote the original software. If you use this software
+**     in a product, an acknowledgment in the product documentation would be
+**     appreciated but is not required.
+**  2. Altered source versions must be plainly marked as such, and must not be
+**     misrepresented as being the original software.
+**  3. This notice may not be removed or altered from any source distribution.
+**
+**  gl_postprocess.cpp
+**  Post processing effects in the render pipeline
 **
 */
 
@@ -51,6 +49,10 @@
 #include "gl/stereo3d/gl_stereo3d.h"
 #include "gl/textures/gl_hwtexture.h"
 #include "r_videoscale.h"
+
+extern bool vid_hdr_active;
+
+CVAR(Int, gl_dither_bpc, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 
 void FGLRenderer::RenderScreenQuad()
 {
@@ -704,6 +706,7 @@ void FGLRenderer::CopyToBackbuffer(const IntRect *bounds, bool applyGamma)
 	if (FGLRenderBuffers::IsEnabled())
 	{
 		FGLPostProcessState savedState;
+		savedState.SaveTextureBindings(2);
 		mBuffers->BindOutputFB();
 
 		IntRect box;
@@ -732,6 +735,8 @@ void FGLRenderer::DrawPresentTexture(const IntRect &box, bool applyGamma)
 {
 	glViewport(box.left, box.top, box.width, box.height);
 
+	GLRenderer->mBuffers->BindDitherTexture(1);
+
 	glActiveTexture(GL_TEXTURE0);
 	if (ViewportLinearScale())
 	{
@@ -759,6 +764,18 @@ void FGLRenderer::DrawPresentTexture(const IntRect &box, bool applyGamma)
 		mPresentShader->Uniforms->Brightness = clamp<float>(vid_brightness, -0.8f, 0.8f);
 		mPresentShader->Uniforms->Saturation = clamp<float>(vid_saturation, -15.0f, 15.f);
 		mPresentShader->Uniforms->GrayFormula = static_cast<int>(gl_satformula);
+	}
+	if (vid_hdr_active && framebuffer->IsFullscreen())
+	{
+		// Full screen exclusive mode treats a rgba16f frame buffer as linear.
+		// It probably will eventually in desktop mode too, but the DWM doesn't seem to support that.
+		mPresentShader->Uniforms->HdrMode = 1;
+		mPresentShader->Uniforms->ColorScale = (gl_dither_bpc == -1) ? 1023.0f : (float)((1 << gl_dither_bpc) - 1);
+	}
+	else
+	{
+		mPresentShader->Uniforms->HdrMode = 0;
+		mPresentShader->Uniforms->ColorScale = (gl_dither_bpc == -1) ? 255.0f : (float)((1 << gl_dither_bpc) - 1);
 	}
 	mPresentShader->Uniforms->Scale = { screen->mScreenViewport.width / (float)mBuffers->GetWidth(), screen->mScreenViewport.height / (float)mBuffers->GetHeight() };
 	mPresentShader->Uniforms.Set();

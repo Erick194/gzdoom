@@ -1420,7 +1420,7 @@ class CommandDrawNumber : public CommandDrawString
 						add = Slots[0] + Slots[1] + Slots[2] + Slots[3] + Slots[4];
 					}
 					//Hexen counts basic armor also so we should too.
-					if(statusBar->armor != NULL)
+					if(statusBar->armor != nullptr && statusBar->armor->IntVar(NAME_Amount) > 0)
 					{
 						add += statusBar->armor->FloatVar(NAME_SavePercent) * 100;
 					}
@@ -1484,7 +1484,7 @@ class CommandDrawNumber : public CommandDrawString
 					break;
 				case INTCVAR:
 				{
-					FBaseCVar *CVar = GetCVar(statusBar->CPlayer->mo, cvarName);
+					FBaseCVar *CVar = GetCVar(int(statusBar->CPlayer - players), cvarName);
 					if (CVar != nullptr)
 					{
 						ECVarType cvartype = CVar->GetRealType();
@@ -3534,7 +3534,7 @@ class CommandIfCVarInt : public SBarInfoNegatableFlowControl
 			SBarInfoNegatableFlowControl::Tick(block, statusBar, hudChanged);
 
 			bool result = false;
-			cvar = GetCVar(statusBar->CPlayer->mo, cvarname);
+			cvar = GetCVar(int(statusBar->CPlayer - players), cvarname);
 
 			if (cvar != nullptr)
 			{

@@ -34,9 +34,10 @@
 #ifndef __C_CVARS_H__
 #define __C_CVARS_H__
 
-#include "doomtype.h"
+#include "zstring.h"
 #include "tarray.h"
 
+class FSerializer;
 /*
 ==========================================================
 
@@ -47,24 +48,29 @@ CVARS (console variables)
 
 enum
 {
-	CVAR_ARCHIVE		= 1,	// set to cause it to be saved to config
-	CVAR_USERINFO		= 2,	// added to userinfo  when changed
-	CVAR_SERVERINFO		= 4,	// added to serverinfo when changed
-	CVAR_NOSET			= 8,	// don't allow change from console at all,
-								// but can be set from the command line
-	CVAR_LATCH			= 16,	// save changes until server restart
-	CVAR_UNSETTABLE		= 32,	// can unset this var from console
-	CVAR_DEMOSAVE		= 64,	// save the value of this cvar in a demo
-	CVAR_ISDEFAULT		= 128,	// is cvar unchanged since creation?
-	CVAR_AUTO			= 256,	// allocated; needs to be freed when destroyed
-	CVAR_NOINITCALL		= 512,	// don't call callback at game start
-	CVAR_GLOBALCONFIG	= 1024,	// cvar is saved to global config section
-	CVAR_VIDEOCONFIG	= 2048, // cvar is saved to video config section (not implemented)
-	CVAR_NOSAVE			= 4096, // when used with CVAR_SERVERINFO, do not save var to savegame
-	CVAR_MOD			= 8192,	// cvar was defined by a mod
-	CVAR_IGNORE			= 16384,// do not send cvar across the network/inaccesible from ACS (dummy mod cvar)
-	CVAR_CHEAT			= 32768,// can be set only when sv_cheats is enabled
-	CVAR_UNSAFECONTEXT	= 65536,// cvar value came from unsafe context
+	CVAR_ARCHIVE       = 1,       // set to cause it to be saved to config.
+	CVAR_USERINFO      = 1 <<  1, // added to userinfo  when changed.
+	CVAR_SERVERINFO    = 1 <<  2, // added to serverinfo when changed.
+	CVAR_NOSET         = 1 <<  3, // don't allow change from console at all,
+	                              // but can be set from the command line.
+	CVAR_LATCH         = 1 <<  4, // save changes until server restart.
+	CVAR_UNSETTABLE    = 1 <<  5, // can unset this var from console.
+	CVAR_DEMOSAVE      = 1 <<  6, // save the value of this cvar in a demo.
+	CVAR_ISDEFAULT     = 1 <<  7, // is cvar unchanged since creation?
+	CVAR_AUTO          = 1 <<  8, // allocated; needs to be freed when destroyed.
+	CVAR_NOINITCALL    = 1 <<  9, // don't call callback at game start.
+	CVAR_GLOBALCONFIG  = 1 << 10, // cvar is saved to global config section.
+	CVAR_VIDEOCONFIG   = 1 << 11, // cvar is saved to video config section (not implemented).
+	CVAR_NOSAVE        = 1 << 12, // when used with CVAR_SERVERINFO, do not save var to savegame
+	                              // and config.
+	CVAR_MOD           = 1 << 13, // cvar was defined by a mod.
+	CVAR_IGNORE        = 1 << 14, // do not send cvar across the network/inaccesible from ACS
+	                              // (dummy mod cvar).
+	CVAR_CHEAT         = 1 << 15, // can be set only when sv_cheats is enabled.
+	CVAR_UNSAFECONTEXT = 1 << 16, // cvar value came from unsafe context.
+	CVAR_VIRTUAL       = 1 << 17, // do not invoke the callback recursively so it can be used to
+	                              // mirror an external variable.
+	CVAR_CONFIG_ONLY   = 1 << 18, // do not save var to savegame and do not send it across network.
 };
 
 union UCVarValue
@@ -73,7 +79,6 @@ union UCVarValue
 	int Int;
 	float Float;
 	const char *String;
-	const GUID *pGUID;
 };
 
 enum ECVarType
@@ -85,12 +90,10 @@ enum ECVarType
 	CVAR_Color,		// stored as CVAR_Int
 	CVAR_DummyBool,		// just redirects to another cvar
 	CVAR_DummyInt,		// just redirects to another cvar
-	CVAR_Dummy,			// Unknown
-	CVAR_GUID
+	CVAR_Dummy			// Unknown
 };
 
 class FConfigFile;
-class AActor;
 
 class FxCVar;
 
@@ -100,7 +103,15 @@ public:
 	FBaseCVar (const char *name, uint32_t flags, void (*callback)(FBaseCVar &));
 	virtual ~FBaseCVar ();
 
-	inline void Callback () { if (m_Callback) m_Callback (*this); }
+	inline void Callback () 
+	{ 
+		if (m_Callback && !inCallback)
+		{
+			inCallback = !!(Flags & CVAR_VIRTUAL);	// Virtual CVARs never invoke the callback recursively, giving it a chance to manipulate the value without side effects.
+			m_Callback(*this);
+			inCallback = false;
+		}
+	}
 
 	inline const char *GetName () const { return Name; }
 	inline uint32_t GetFlags () const { return Flags; }
@@ -140,16 +151,15 @@ protected:
 	static int ToInt (UCVarValue value, ECVarType type);
 	static float ToFloat (UCVarValue value, ECVarType type);
 	static const char *ToString (UCVarValue value, ECVarType type);
-	static const GUID *ToGUID (UCVarValue value, ECVarType type);
 	static UCVarValue FromBool (bool value, ECVarType type);
 	static UCVarValue FromInt (int value, ECVarType type);
 	static UCVarValue FromFloat (float value, ECVarType type);
 	static UCVarValue FromString (const char *value, ECVarType type);
-	static UCVarValue FromGUID (const GUID &value, ECVarType type);
 
 	char *Name;
 	FString SafeValue;
 	uint32_t Flags;
+	bool inCallback;
 
 private:
 	FBaseCVar (const FBaseCVar &var) = delete;
@@ -162,6 +172,7 @@ private:
 	static bool m_DoNoSet;
 
 	friend FString C_GetMassCVarString (uint32_t filter, bool compact);
+	friend void C_SerializeCVars(FSerializer& arc, const char* label, uint32_t filter);
 	friend void C_ReadCVars (uint8_t **demo_p);
 	friend void C_BackupCVars (void);
 	friend FBaseCVar *FindCVar (const char *var_name, FBaseCVar **prev);
@@ -185,6 +196,8 @@ void C_WriteCVars (uint8_t **demo_p, uint32_t filter, bool compact=false);
 // Read all cvars from *demo_p and set them appropriately.
 void C_ReadCVars (uint8_t **demo_p);
 
+void C_SerializeCVars(FSerializer& arc, const char* label, uint32_t filter);
+
 // Backup demo cvars. Called before a demo starts playing to save all
 // cvars the demo might change.
 void C_BackupCVars (void);
@@ -194,7 +207,7 @@ FBaseCVar *FindCVar (const char *var_name, FBaseCVar **prev);
 FBaseCVar *FindCVarSub (const char *var_name, int namelen);
 
 // Used for ACS and DECORATE.
-FBaseCVar *GetCVar(AActor *activator, const char *cvarname);
+FBaseCVar *GetCVar(int playernum, const char *cvarname);
 FBaseCVar *GetUserCVar(int playernum, const char *cvarname);
 
 // Create a new cvar with the specified name and type
@@ -401,31 +414,6 @@ protected:
 	FIntCVar &ValueVar;
 	uint32_t BitVal;
 	int BitNum;
-};
-
-class FGUIDCVar : public FBaseCVar
-{
-public:
-	FGUIDCVar (const char *name, const GUID *defguid, uint32_t flags, void (*callback)(FGUIDCVar &)=NULL);
-
-	virtual ECVarType GetRealType () const;
-
-	virtual UCVarValue GetGenericRep (ECVarType type) const;
-	virtual UCVarValue GetFavoriteRep (ECVarType *type) const;
-	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
-	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const;
-	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
-
-	const GUID &operator= (const GUID &guidval)
-		{ UCVarValue val; val.pGUID = &guidval; SetGenericRep (val, CVAR_GUID); return guidval; }
-	inline operator const GUID & () const { return Value; }
-	inline const GUID &operator *() const { return Value; }
-
-protected:
-	virtual void DoSet (UCVarValue value, ECVarType type);
-
-	GUID Value;
-	GUID DefaultValue;
 };
 
 extern int cvar_defflags;

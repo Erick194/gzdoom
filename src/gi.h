@@ -49,6 +49,7 @@ enum
 	GI_COMPATPOLY1			= 0x00000040,	// Hexen's MAP36 needs old polyobject drawing
 	GI_COMPATPOLY2			= 0x00000080,	// so does HEXDD's MAP47
 	GI_NOTEXTCOLOR			= 0x00000100,	// Chex Quest 3 would have everything green
+	GI_IGNORETITLEPATCHES	= 0x00000200,	// Ignore the map name graphics when not runnning in English language
 	GI_IGNOREBIGFONTLUMP	= 0x00000400,	// Needed for Chex Quest 3, so that the extended internal font can be used instead.
 };
 
@@ -112,6 +113,7 @@ struct gameinfo_t
 	FString ConfigName;
 
 	FString TitlePage;
+	bool nokeyboardcheats;
 	bool drawreadthis;
 	bool noloopfinalemusic;
 	bool intermissioncounter;
@@ -119,6 +121,7 @@ struct gameinfo_t
 	bool swapmenu;
 	bool dontcrunchcorpses;
 	bool correctprintbold;
+	bool forcetextinmenus;
 	TArray<FName> creditPages;
 	TArray<FName> finalePages;
 	TArray<FName> infoPages;
@@ -156,6 +159,7 @@ struct gameinfo_t
 	FString statusbar;
 	int statusbarfile = -1;
 	FName statusbarclass;
+	FName althudclass;
 	int statusbarclassfile = -1;
 	FName MessageBoxClass;
 	FName backpacktype;
@@ -190,6 +194,8 @@ struct gameinfo_t
 	FGIFont mStatscreenMapNameFont;
 	FGIFont mStatscreenFinishedFont;
 	FGIFont mStatscreenEnteringFont;
+	FGIFont mStatscreenContentFont;
+	FGIFont mStatscreenAuthorFont;
 	bool norandomplayerclass;
 	bool forcekillscripts;
 	FName statusscreen_single;
@@ -199,6 +205,7 @@ struct gameinfo_t
 	int berserkpic;
 	double normforwardmove[2];
 	double normsidemove[2];
+	int fullscreenautoaspect = 0;
 
 	const char *GetFinalePage(unsigned int num) const;
 };

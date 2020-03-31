@@ -65,7 +65,7 @@ void gl_PatchMenu()
 		for(int i = (*opt)->mValues.Size()-1; i>=0; i--)
 		{
 			// Delete 'Doom' lighting mode
-			if ((*opt)->mValues[i].Value == 2.0 || (*opt)->mValues[i].Value == 8.0)
+			if ((*opt)->mValues[i].Value == 2.0 || (*opt)->mValues[i].Value == 8.0 || (*opt)->mValues[i].Value == 16.0)
 			{
 				(*opt)->mValues.Delete(i);
 			}
@@ -86,7 +86,8 @@ void gl_PatchMenu()
 	}
 
 	// disable features that don't work without shaders.
-	if (gl_lightmode == 2 || gl_lightmode == 8) gl_lightmode = 3;
+	if (gl_lightmode == (int)ELightMode::Doom || gl_lightmode == (int)ELightMode::ZDoomSoftware || gl_lightmode == (int)ELightMode::DoomSoftware)
+		gl_lightmode = (int)ELightMode::DoomDark;
 	if (gl_fogmode == 2) gl_fogmode = 1;
 
 	// remove more unsupported stuff like postprocessing options.
@@ -523,7 +524,7 @@ static bool CheckFog(FColormap *cm, int lightlevel)
 	{
 		frontfog = true;
 	}
-	else  if (level.fogdensity != 0 || (level.lightmode & 4) || cm->FogDensity > 0)
+	else  if (level.fogdensity != 0 || (level.lightmode == ELightMode::DoomLegacy) || cm->FogDensity > 0)
 	{
 		// case 3: level has fog density set
 		frontfog = true;
@@ -901,7 +902,7 @@ void GLSceneDrawer::RenderMultipassStuff(FDrawInfo *di)
 		{
 			gl_RenderState.BlendFunc(GL_ONE, GL_ONE);
 			glDepthFunc(GL_EQUAL);
-			if (level.lightmode >= 8) gl_RenderState.SetSoftLightLevel(255);
+			if (level.isSoftwareLighting()) gl_RenderState.SetSoftLightLevel(255);
 			di->dldrawlists[GLLDL_WALLS_PLAIN].DrawWalls(di, GLPASS_LIGHTTEX);
 			di->dldrawlists[GLLDL_WALLS_MASKED].DrawWalls(di, GLPASS_LIGHTTEX);
 			di->dldrawlists[GLLDL_FLATS_PLAIN].DrawFlats(di, GLPASS_LIGHTTEX);

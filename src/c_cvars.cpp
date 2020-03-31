@@ -44,9 +44,13 @@
 #include "d_player.h"
 
 #include "d_netinf.h"
+#include "serializer.h"
 
 #include "menu/menu.h"
 #include "vm.h"
+
+#include "w_wad.h"
+#include "version.h"
 
 struct FLatchedValue
 {
@@ -87,6 +91,7 @@ FBaseCVar::FBaseCVar (const char *var_name, uint32_t flags, void (*callback)(FBa
 	m_Callback = callback;
 	Flags = 0;
 	Name = NULL;
+	inCallback = false;
 
 	if (var_name)
 	{
@@ -293,9 +298,6 @@ bool FBaseCVar::ToBool (UCVarValue value, ECVarType type)
 		else
 			return !!strtoll (value.String, NULL, 0);
 
-	case CVAR_GUID:
-		return false;
-
 	default:
 		return false;
 	}
@@ -327,7 +329,6 @@ int FBaseCVar::ToInt (UCVarValue value, ECVarType type)
 				res = (int)strtoll (value.String, NULL, 0); 
 			break;
 		}
-	case CVAR_GUID:			res = 0; break;
 	default:				res = 0; break;
 	}
 	return res;
@@ -348,9 +349,6 @@ float FBaseCVar::ToFloat (UCVarValue value, ECVarType type)
 
 	case CVAR_String:
 		return (float)strtod (value.String, NULL);
-
-	case CVAR_GUID:
-		return 0.f;
 
 	default:
 		return 0.f;
@@ -382,33 +380,11 @@ const char *FBaseCVar::ToString (UCVarValue value, ECVarType type)
 		IGNORE_FORMAT_POST
 		break;
 
-	case CVAR_GUID:
-		FormatGUID (cstrbuf, countof(cstrbuf), *value.pGUID);
-		break;
-
 	default:
 		strcpy (cstrbuf, "<huh?>");
 		break;
 	}
 	return cstrbuf;
-}
-
-const GUID *FBaseCVar::ToGUID (UCVarValue value, ECVarType type)
-{
-	UCVarValue trans;
-
-	switch (type)
-	{
-	case CVAR_String:
-		trans = FromString (value.String, CVAR_GUID);
-		return trans.pGUID;
-
-	case CVAR_GUID:
-		return value.pGUID;
-
-	default:
-		return NULL;
-	}
 }
 
 UCVarValue FBaseCVar::FromBool (bool value, ECVarType type)
@@ -431,10 +407,6 @@ UCVarValue FBaseCVar::FromBool (bool value, ECVarType type)
 
 	case CVAR_String:
 		ret.String = value ? truestr : falsestr;
-		break;
-
-	case CVAR_GUID:
-		ret.pGUID = NULL;
 		break;
 
 	default:
@@ -465,10 +437,6 @@ UCVarValue FBaseCVar::FromInt (int value, ECVarType type)
 	case CVAR_String:
 		mysnprintf (cstrbuf, countof(cstrbuf), "%i", value);
 		ret.String = cstrbuf;
-		break;
-
-	case CVAR_GUID:
-		ret.pGUID = NULL;
 		break;
 
 	default:
@@ -503,10 +471,6 @@ UCVarValue FBaseCVar::FromFloat (float value, ECVarType type)
 		ret.String = cstrbuf;
 		break;
 
-	case CVAR_GUID:
-		ret.pGUID = NULL;
-		break;
-
 	default:
 		break;
 	}
@@ -539,7 +503,6 @@ static uint8_t HexToByte (const char *hex)
 UCVarValue FBaseCVar::FromString (const char *value, ECVarType type)
 {
 	UCVarValue ret;
-	int i;
 
 	switch (type)
 	{
@@ -569,57 +532,6 @@ UCVarValue FBaseCVar::FromString (const char *value, ECVarType type)
 		ret.String = const_cast<char *>(value);
 		break;
 
-	case CVAR_GUID:
-		// {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
-		// 01234567890123456789012345678901234567
-		// 0         1         2         3
-
-		ret.pGUID = NULL;
-		if (value == NULL)
-		{
-			break;
-		}
-		for (i = 0; value[i] != 0 && i < 38; i++)
-		{
-			switch (i)
-			{
-			case 0:
-				if (value[i] != '{')
-					break;
-			case 9:
-			case 14:
-			case 19:
-			case 24:
-				if (value[i] != '-')
-					break;
-			case 37:
-				if (value[i] != '}')
-					break;
-			default:
-				if (value[i] < '0' || 
-					(value[i] > '9' && value[i] < 'A') || 
-					(value[i] > 'F' && value[i] < 'a') || 
-					value[i] > 'f')
-					break;
-			}
-		}
-		if (i == 38 && value[i] == 0)
-		{
-			cGUID.Data1 = strtoul (value + 1, NULL, 16);
-			cGUID.Data2 = (uint16_t)strtoul (value + 10, NULL, 16);
-			cGUID.Data3 = (uint16_t)strtoul (value + 15, NULL, 16);
-			cGUID.Data4[0] = HexToByte (value + 20);
-			cGUID.Data4[1] = HexToByte (value + 22);
-			cGUID.Data4[2] = HexToByte (value + 25);
-			cGUID.Data4[3] = HexToByte (value + 27);
-			cGUID.Data4[4] = HexToByte (value + 29);
-			cGUID.Data4[5] = HexToByte (value + 31);
-			cGUID.Data4[6] = HexToByte (value + 33);
-			cGUID.Data4[7] = HexToByte (value + 35);
-			ret.pGUID = &cGUID;
-		}
-		break;
-
 	default:
 		break;
 	}
@@ -627,39 +539,6 @@ UCVarValue FBaseCVar::FromString (const char *value, ECVarType type)
 	return ret;
 }
 
-UCVarValue FBaseCVar::FromGUID (const GUID &guid, ECVarType type)
-{
-	UCVarValue ret;
-
-	switch (type)
-	{
-	case CVAR_Bool:
-		ret.Bool = false;
-		break;
-
-	case CVAR_Int:
-		ret.Int = 0;
-		break;
-
-	case CVAR_Float:
-		ret.Float = 0.f;
-		break;
-
-	case CVAR_String:
-		ret.pGUID = &guid;
-		ret.String = ToString (ret, CVAR_GUID);
-		break;
-
-	case CVAR_GUID:
-		ret.pGUID = &guid;
-		break;
-
-	default:
-		break;
-	}
-
-	return ret;
-}
 FBaseCVar *cvar_set (const char *var_name, const char *val)
 {
 	FBaseCVar *var;
@@ -1054,80 +933,6 @@ int FColorCVar::ToInt2 (UCVarValue value, ECVarType type)
 }
 
 //
-// GUID cvar implementation
-//
-
-FGUIDCVar::FGUIDCVar (const char *name, const GUID *def, uint32_t flags, void (*callback)(FGUIDCVar &))
-: FBaseCVar (name, flags, reinterpret_cast<void (*)(FBaseCVar &)>(callback))
-{
-	if (def != NULL)
-	{
-		DefaultValue = *def;
-		if (Flags & CVAR_ISDEFAULT)
-			Value = *def;
-	}
-	else
-	{
-		memset (&Value, 0, sizeof(DefaultValue));
-		memset (&DefaultValue, 0, sizeof(DefaultValue));
-	}
-}
-
-ECVarType FGUIDCVar::GetRealType () const
-{
-	return CVAR_GUID;
-}
-
-UCVarValue FGUIDCVar::GetGenericRep (ECVarType type) const
-{
-	return FromGUID (Value, type);
-}
-
-UCVarValue FGUIDCVar::GetFavoriteRep (ECVarType *type) const
-{
-	UCVarValue ret;
-	*type = CVAR_GUID;
-	ret.pGUID = &Value;
-	return ret;
-}
-
-UCVarValue FGUIDCVar::GetGenericRepDefault (ECVarType type) const
-{
-	return FromGUID (DefaultValue, type);
-}
-
-UCVarValue FGUIDCVar::GetFavoriteRepDefault (ECVarType *type) const
-{
-	UCVarValue ret;
-	*type = CVAR_GUID;
-	ret.pGUID = &DefaultValue;
-	return ret;
-}
-
-void FGUIDCVar::SetGenericRepDefault (UCVarValue value, ECVarType type)
-{
-	const GUID *guid = ToGUID (value, type);
-	if (guid != NULL)
-	{
-		Value = *guid;
-		if (Flags & CVAR_ISDEFAULT)
-		{
-			SetGenericRep (value, type);
-			Flags |= CVAR_ISDEFAULT;
-		}
-	}
-}
-
-void FGUIDCVar::DoSet (UCVarValue value, ECVarType type)
-{
-	const GUID *guid = ToGUID (value, type);
-	if (guid != NULL)
-	{
-		Value = *guid;
-	}
-}
-
-//
 // More base cvar stuff
 //
 
@@ -1458,6 +1263,47 @@ FString C_GetMassCVarString (uint32_t filter, bool compact)
 	return dump;
 }
 
+void C_SerializeCVars(FSerializer &arc, const char *label, uint32_t filter)
+{
+	FBaseCVar* cvar;
+	FString dump;
+
+	if (arc.BeginObject(label))
+	{
+		if (arc.isWriting())
+		{
+			for (cvar = CVars; cvar != NULL; cvar = cvar->m_Next)
+			{
+				if ((cvar->Flags & filter) && !(cvar->Flags & (CVAR_NOSAVE | CVAR_IGNORE | CVAR_CONFIG_ONLY)))
+				{
+					UCVarValue val = cvar->GetGenericRep(CVAR_String);
+					char* c = const_cast<char*>(val.String);
+					arc(cvar->GetName(), c);
+				}
+			}
+		}
+		else
+		{
+			for (cvar = CVars; cvar != NULL; cvar = cvar->m_Next)
+			{
+				if ((cvar->Flags & filter) && !(cvar->Flags & (CVAR_NOSAVE | CVAR_IGNORE | CVAR_CONFIG_ONLY)))
+				{
+					UCVarValue val;
+					char *c = nullptr;
+					arc(cvar->GetName(), c);
+					if (c != nullptr)
+					{
+						val.String = c;
+						cvar->SetGenericRep(val, CVAR_String);
+						delete[] c;
+					}
+				}
+			}
+		}
+		arc.EndObject();
+	}
+}
+
 void C_ReadCVars (uint8_t **demo_p)
 {
 	char *ptr = *((char **)demo_p);
@@ -1599,7 +1445,7 @@ DEFINE_ACTION_FUNCTION(_CVar, GetCVar)
 	PARAM_PROLOGUE;
 	PARAM_NAME(name);
 	PARAM_POINTER(plyr, player_t);
-	ACTION_RETURN_POINTER(GetCVar(plyr ? plyr->mo : nullptr, name));
+	ACTION_RETURN_POINTER(GetCVar(plyr ? int(plyr - players) : -1, name));
 }
 
 FBaseCVar *FindCVarSub (const char *var_name, int namelen)
@@ -1624,7 +1470,7 @@ FBaseCVar *FindCVarSub (const char *var_name, int namelen)
 	return var;
 }
 
-FBaseCVar *GetCVar(AActor *activator, const char *cvarname)
+FBaseCVar *GetCVar(int playernum, const char *cvarname)
 {
 	FBaseCVar *cvar = FindCVar(cvarname, nullptr);
 	// Either the cvar doesn't exist, or it's for a mod that isn't loaded, so return nullptr.
@@ -1637,11 +1483,7 @@ FBaseCVar *GetCVar(AActor *activator, const char *cvarname)
 		// For userinfo cvars, redirect to GetUserCVar
 		if (cvar->GetFlags() & CVAR_USERINFO)
 		{
-			if (activator == nullptr || activator->player == nullptr)
-			{
-				return nullptr;
-			}
-			return GetUserCVar(int(activator->player - players), cvarname);
+			return GetUserCVar(playernum, cvarname);
 		}
 		return cvar;
 	}
@@ -1737,22 +1579,35 @@ void C_SetCVarsToDefaults (void)
 	}
 }
 
+static int cvarcmp(const void* a, const void* b)
+{
+	FBaseCVar** A = (FBaseCVar**)a;
+	FBaseCVar** B = (FBaseCVar**)b;
+	return strcmp((*A)->GetName(), (*B)->GetName());
+}
+
 void C_ArchiveCVars (FConfigFile *f, uint32_t filter)
 {
 	FBaseCVar *cvar = CVars;
+	TArray<FBaseCVar*> cvarlist;
 
 	while (cvar)
 	{
 		if ((cvar->Flags &
-			(CVAR_GLOBALCONFIG|CVAR_ARCHIVE|CVAR_MOD|CVAR_AUTO|CVAR_USERINFO|CVAR_SERVERINFO|CVAR_NOSAVE))
+			(CVAR_GLOBALCONFIG|CVAR_ARCHIVE|CVAR_MOD|CVAR_AUTO|CVAR_USERINFO|CVAR_SERVERINFO|CVAR_NOSAVE|CVAR_CONFIG_ONLY))
 			== filter)
 		{
-			const char *const value = (cvar->Flags & CVAR_ISDEFAULT)
-				? cvar->GetGenericRep(CVAR_String).String
-				: cvar->SafeValue.GetChars();
-			f->SetValueForKey(cvar->GetName(), value);
+			cvarlist.Push(cvar);
 		}
 		cvar = cvar->m_Next;
+	}
+	qsort(cvarlist.Data(), cvarlist.Size(), sizeof(FBaseCVar*), cvarcmp);
+	for (auto cvar : cvarlist)
+	{
+		const char* const value = (cvar->Flags & CVAR_ISDEFAULT)
+			? cvar->GetGenericRep(CVAR_String).String
+			: cvar->SafeValue.GetChars();
+		f->SetValueForKey(cvar->GetName(), value);
 	}
 }
 
@@ -1932,6 +1787,62 @@ CCMD (archivecvar)
 		if (var != NULL && (var->GetFlags() & CVAR_AUTO))
 		{
 			var->SetArchiveBit ();
+		}
+	}
+}
+
+void C_GrabCVarDefaults ()
+{
+	int lump, lastlump = 0;
+	int lumpversion, gamelastrunversion;
+	gamelastrunversion = atoi(LASTRUNVERSION);
+
+	while ((lump = Wads.FindLump("DEFCVARS", &lastlump)) != -1)
+	{
+		// don't parse from wads
+		if (lastlump > Wads.GetLastLump(Wads.GetIwadNum()))
+			I_FatalError("Cannot load DEFCVARS from a wadfile!\n");
+
+		FScanner sc(lump);
+
+		sc.MustGetString();
+		if (!sc.Compare("version"))
+			sc.ScriptError("Must declare version for defcvars! (currently: %i)", gamelastrunversion);
+		sc.MustGetNumber();
+		lumpversion = sc.Number;
+		if (lumpversion > gamelastrunversion)
+			sc.ScriptError("Unsupported version %i (%i supported)", lumpversion, gamelastrunversion);
+		if (lumpversion < 219)
+			sc.ScriptError("Version must be at least 219 (current version %i)", gamelastrunversion);
+
+		FBaseCVar *var;
+
+		while (sc.GetString())
+		{
+			if (sc.Compare("set"))
+			{
+				sc.MustGetString();
+			}
+			var = FindCVar (sc.String, NULL);
+			if (var != NULL)
+			{
+				if (var->GetFlags() & CVAR_ARCHIVE)
+				{
+					UCVarValue val;
+
+					sc.MustGetString();
+					val.String = const_cast<char *>(sc.String);
+					var->SetGenericRepDefault(val, CVAR_String);
+				}
+				else
+				{
+					sc.ScriptError("Cannot set cvar default for non-config cvar '%s'", sc.String);
+				}
+			}
+			else
+			{
+				sc.ScriptError("Unknown cvar '%s'", sc.String);
+			}
 		}
 	}
 }

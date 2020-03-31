@@ -33,6 +33,7 @@
 #include "r_data/models/models.h"
 #include "textures/skyboxtexture.h"
 #include "hwrenderer/textures/hw_material.h"
+#include "stats.h"
 
 
 //==========================================================================
@@ -192,6 +193,10 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 
 	if (gl_precache)
 	{
+		cycle_t precache;
+		precache.Reset();
+		precache.Clock();
+
 		// cache all used textures
 		for (int i = cnt - 1; i >= 0; i--)
 		{
@@ -214,6 +219,9 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 				Models[i]->BuildVertexBuffer(renderer);
 		}
 		delete renderer;
+
+		precache.Unclock();
+		DPrintf(DMSG_NOTIFY, "Textures precached in %.3f ms\n", precache.TimeMS());
 	}
 
 	delete[] spritehitlist;

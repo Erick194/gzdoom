@@ -50,6 +50,7 @@
 #include "actorinlines.h"
 #include "scriptutil.h"
 #include "vm.h"
+#include "s_music.h"
 
 static FRandom pr_script("FScript");
 
@@ -389,7 +390,7 @@ static FSoundID T_FindSound(const char * name)
 	}
 
 	int id = S_AddSound(name, buffer);
-	S_HashSounds();
+	soundEngine->HashSounds();
 	return FSoundID(id);
 }
 
@@ -610,7 +611,7 @@ void FParser::SF_Input(void)
 
 void FParser::SF_Beep(void)
 {
-	S_Sound(CHAN_AUTO, "misc/chat", 1.0f, ATTN_IDLE);
+	S_Sound(CHAN_AUTO, 0, "misc/chat", 1.0f, ATTN_IDLE);
 }
 
 //==========================================================================
@@ -647,7 +648,7 @@ void FParser::SF_ExitLevel(void)
 void FParser::SF_Tip(void)
 {
 	if (t_argc>0 && Script->trigger &&
-		Script->trigger->CheckLocalView(consoleplayer)) 
+		Script->trigger->CheckLocalView()) 
 	{
 		C_MidPrint(SmallFont, GetFormatString(0).GetChars());
 	}
@@ -686,7 +687,7 @@ void FParser::SF_PlayerTip(void)
 	if (CheckArgs(1))
 	{
 		int plnum = T_GetPlayerNum(t_argv[0]);
-		if (plnum!=-1 && players[plnum].mo->CheckLocalView(consoleplayer)) 
+		if (plnum!=-1 && players[plnum].mo->CheckLocalView()) 
 		{
 			C_MidPrint(SmallFont, GetFormatString(1).GetChars());
 		}
@@ -702,7 +703,7 @@ void FParser::SF_PlayerTip(void)
 void FParser::SF_Message(void)
 {
 	if (t_argc>0 && Script->trigger &&
-		Script->trigger->CheckLocalView(consoleplayer))
+		Script->trigger->CheckLocalView())
 	{
 		Printf(PRINT_HIGH, "%s\n", GetFormatString(0).GetChars());
 	}
@@ -719,7 +720,7 @@ void FParser::SF_PlayerMsg(void)
 	if (CheckArgs(1))
 	{
 		int plnum = T_GetPlayerNum(t_argv[0]);
-		if (plnum!=-1 && players[plnum].mo->CheckLocalView(consoleplayer)) 
+		if (plnum!=-1 && players[plnum].mo->CheckLocalView()) 
 		{
 			Printf(PRINT_HIGH, "%s\n", GetFormatString(1).GetChars());
 		}
@@ -1496,7 +1497,7 @@ void FParser::SF_StartSound(void)
 		
 		if (mo)
 		{
-			S_Sound(mo, CHAN_BODY, T_FindSound(stringvalue(t_argv[1])), 1, ATTN_NORM);
+			S_Sound(mo, CHAN_BODY, 0, T_FindSound(stringvalue(t_argv[1])), 1, ATTN_NORM);
 		}
 	}
 }
@@ -1522,7 +1523,7 @@ void FParser::SF_StartSectorSound(void)
 		while ((i = itr.Next()) >= 0)
 		{
 			sector = &level.sectors[i];
-			S_Sound(sector, CHAN_BODY, T_FindSound(stringvalue(t_argv[1])), 1.0f, ATTN_NORM);
+			S_Sound(sector, CHAN_BODY, 0, T_FindSound(stringvalue(t_argv[1])), 1.0f, ATTN_NORM);
 		}
 	}
 }
@@ -2838,7 +2839,7 @@ void FParser::SF_AmbientSound(void)
 {
 	if (CheckArgs(1))
 	{
-		S_Sound(CHAN_AUTO, T_FindSound(stringvalue(t_argv[0])), 1, ATTN_NORM);
+		S_Sound(CHAN_AUTO, 0, T_FindSound(stringvalue(t_argv[0])), 1, ATTN_NORM);
 	}
 }
 
@@ -2937,7 +2938,7 @@ void FParser::SF_SpawnExplosion()
 		{
 			spawn->ClearCounters();
 			t_return.value.i = spawn->SetState(spawn->FindState(NAME_Death));
-			if(spawn->DeathSound) S_Sound (spawn, CHAN_BODY, spawn->DeathSound, 1, ATTN_NORM);
+			if(spawn->DeathSound) S_Sound (spawn, CHAN_BODY, 0, spawn->DeathSound, 1, ATTN_NORM);
 		}
 	}
 }
@@ -3764,7 +3765,7 @@ void FParser::SF_SpawnShot2(void)
 		AActor *mo = Spawn(pclass, source->PosPlusZ(z), ALLOW_REPLACE);
 		if (mo)
 		{
-			S_Sound(mo, CHAN_VOICE, mo->SeeSound, 1, ATTN_NORM);
+			S_Sound(mo, CHAN_VOICE, 0, mo->SeeSound, 1, ATTN_NORM);
 			mo->target = source;
 			mo->Angles.Yaw = source->Angles.Yaw;
 			mo->Thrust();

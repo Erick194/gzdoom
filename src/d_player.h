@@ -264,8 +264,7 @@ struct userinfo_t : TMap<FName,FBaseCVar *>
 	int SkinNumChanged(int skinnum);
 	int GenderChanged(const char *gendername);
 	int PlayerClassChanged(const char *classname);
-	int PlayerClassNumChanged(int classnum);
-	uint32_t ColorChanged(const char *colorname);
+		uint32_t ColorChanged(const char *colorname);
 	uint32_t ColorChanged(uint32_t colorval);
 	int ColorSetChanged(int setnum);
 };
@@ -290,6 +289,7 @@ public:
 	void SetLogNumber (int num);
 	void SetLogText (const char *text);
 	void SendPitchLimits() const;
+	void SetSubtitle(int num, FSoundID soundid);
 
 	AActor *mo = nullptr;
 	uint8_t		playerstate = 0;
@@ -388,6 +388,8 @@ public:
 	float		BlendA = 0;
 
 	FString		LogText;	// [RH] Log for Strife
+	FString		SubtitleText;
+	int			SubtitleCounter;
 
 	DAngle			MinPitch = 0.;	// Viewpitch limits (negative is up, positive is down)
 	DAngle			MaxPitch = 0.;

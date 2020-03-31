@@ -53,7 +53,8 @@ class ListMenuItemPlayerDisplay : ListMenuItem
 	int mRandomClass;
 	int mRandomTimer;
 	int mClassNum;
-	int mTranslation;
+	Color mBaseColor;
+	Color mAddColor;
 
 	enum EPDFlags
 	{
@@ -73,18 +74,10 @@ class ListMenuItemPlayerDisplay : ListMenuItem
 	{
 		Super.Init(x, y, command);
 		mOwner = menu;
+		mBaseColor = c1;
+		mAddColor = c2;
 
-		Translation trans;
-		for (int i = 0; i < 256; i++)
-		{
-			int r = c1.r + c2.r * i / 255;
-			int g = c1.g + c2.g * i / 255;
-			int b = c1.b + c2.b * i / 255;
-			trans.colors[i] = Color(255, r, g, b);
-		}
-		mTranslation = trans.AddTranslation();
-
-		mBackdrop = TexMan.CheckForTexture("PlayerBackdrop", TexMan.Type_MiscPatch);
+		mBackdrop = TexMan.CheckForTexture("B@CKDROP", TexMan.Type_MiscPatch);	// The weird name is to avoid clashes with mods.
 		mPlayerClass = NULL;
 		mPlayerState = NULL;
 		mNoportrait = np;
@@ -161,7 +154,7 @@ class ListMenuItemPlayerDisplay : ListMenuItem
 
 	bool UpdatePlayerClass()
 	{
-		if (mOwner.mSelectedItem >= 0)
+		if (mOwner && mOwner.mSelectedItem >= 0)
 		{
 			int classnum;
 			Name seltype;
@@ -255,10 +248,19 @@ class ListMenuItemPlayerDisplay : ListMenuItem
 			int x = int(mXpos - 160) * CleanXfac + (screen.GetWidth() >> 1);
 			int y = int(mYpos - 100) * CleanYfac + (screen.GetHeight() >> 1);
 
+			int r = mBaseColor.r + mAddColor.r;
+			int g = mBaseColor.g + mAddColor.g;
+			int b = mBaseColor.b + mAddColor.b;
+			int m = max(r, g, b);
+			r = r * 255 / m;
+			g = g * 255 / m;
+			b = b * 255 / m;
+			Color c = Color(255, r, g, b);
+			
 			screen.DrawTexture(mBackdrop, false, x, y - 1,
 				DTA_DestWidth, 72 * CleanXfac,
 				DTA_DestHeight, 80 * CleanYfac,
-				DTA_TranslationIndex, mTranslation,
+				DTA_Color, c,
 				DTA_Masked, true);
 
 			Screen.DrawFrame (x, y, 72*CleanXfac, 80*CleanYfac-1);
@@ -284,6 +286,69 @@ class ListMenuItemPlayerDisplay : ListMenuItem
 						DTA_TranslationIndex, trans,
 						DTA_FlipX, flip);
 				}
+			}
+		}
+	}
+}
+
+//=============================================================================
+//
+//
+//
+//=============================================================================
+
+class PlayerMenuPlayerDisplay : ListMenuItemPlayerDisplay
+{
+	void Init(Color c1, Color c2)
+	{
+		Super.Init(null, 0, 0, c1, c2, true, 'none');
+	}
+	
+	override void Drawer(bool selected)
+	{
+		int x = screen.GetWidth()/2 + NewPlayerMenu.PLAYERDISPLAY_X * CleanXfac_1;
+		int y = NewPlayerMenu.PLAYERDISPLAY_Y * CleanYfac_1;
+
+		int r = mBaseColor.r + mAddColor.r;
+		int g = mBaseColor.g + mAddColor.g;
+		int b = mBaseColor.b + mAddColor.b;
+		int m = max(r, g, b);
+		r = r * 255 / m;
+		g = g * 255 / m;
+		b = b * 255 / m;
+		Color c = Color(255, r, g, b);
+		
+		screen.DrawTexture(mBackdrop, false, x, y - 1,
+			DTA_DestWidth, NewPlayerMenu.PLAYERDISPLAY_W * CleanXfac_1,
+			DTA_DestHeight, NewPlayerMenu.PLAYERDISPLAY_H * CleanYfac_1,
+			DTA_Color, c,
+			DTA_KeepRatio, mNoPortrait,
+			DTA_Masked, true);
+
+		Screen.DrawFrame (x, y, NewPlayerMenu.PLAYERDISPLAY_W*CleanXfac_1, NewPlayerMenu.PLAYERDISPLAY_H*CleanYfac_1-1);
+
+		if (mPlayerState != NULL)
+		{
+			Vector2 Scale;
+			TextureID sprite;
+			bool flip;
+			
+			let playdef = GetDefaultByType((class<PlayerPawn>)(mPlayerClass.Type));
+			[sprite, flip, Scale] = mPlayerState.GetSpriteTexture(mRotation, mSkin, playdef.Scale);
+		
+			if (sprite.IsValid())
+			{
+				int trans = mTranslate? Translation.MakeID(TRANSLATION_Players, MAXPLAYERS) : 0;
+				let tscale = TexMan.GetScaledSize(sprite);
+				Scale.X *= CleanXfac_1 * tscale.X * 2;
+				Scale.Y *= CleanYfac_1 * tscale.Y * 2;
+				
+				screen.DrawTexture (sprite, false,
+					x + (NewPlayerMenu.PLAYERDISPLAY_W/2) * CleanXfac_1, y + (NewPlayerMenu.PLAYERDISPLAY_H-16) * CleanYfac_1,
+					DTA_DestWidthF, Scale.X, DTA_DestHeightF, Scale.Y,
+					DTA_TranslationIndex, trans,
+					DTA_KeepRatio, mNoPortrait,
+					DTA_FlipX, flip);
 			}
 		}
 	}

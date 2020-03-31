@@ -47,6 +47,7 @@
 #include "gstrings.h"
 #include "g_levellocals.h"
 #include "p_checkposition.h"
+#include "p_linetracedata.h"
 #include "v_font.h"
 #include "menu/menu.h"
 #include "teaminfo.h"
@@ -55,6 +56,7 @@
 #include "wi_stuff.h"
 #include "a_dynlight.h"
 #include "types.h"
+#include "dictionary.h"
 
 static TArray<FPropertyInfo*> properties;
 static TArray<AFuncDesc> AFTable;
@@ -321,6 +323,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF8, HITOWNER, AActor, flags8),
 	DEFINE_FLAG(MF8, NOFRICTION, AActor, flags8),
 	DEFINE_FLAG(MF8, NOFRICTIONBOUNCE, AActor, flags8),
+	DEFINE_FLAG(MF8, RETARGETAFTERSLAM, AActor, flags8),
+	DEFINE_FLAG(MF8, STOPRAILS, AActor, flags8),
 
 	// Effect flags
 	DEFINE_FLAG(FX, VISIBILITYPULSE, AActor, effects),
@@ -900,6 +904,9 @@ void InitThingdef()
 	frp->Size = sizeof(FRailParams);
 	frp->Align = alignof(FRailParams);
 
+	auto fltd = NewStruct("FLineTraceData", nullptr);
+	fltd->Size = sizeof(FLineTraceData);
+	fltd->Align = alignof(FLineTraceData);
 
 	FieldTable.Clear();
 	if (FieldTable.Size() == 0)

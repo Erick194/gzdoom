@@ -124,8 +124,8 @@ class PuzzleItem : Inventory
 			return true;
 		}
 		// [RH] Always play the sound if the use fails.
-		Owner.A_PlaySound ("*puzzfail", CHAN_VOICE);
-		if (Owner.CheckLocalView (consoleplayer))
+		Owner.A_StartSound ("*puzzfail", CHAN_VOICE);
+		if (Owner.CheckLocalView())
 		{
 			Console.MidPrint ("SmallFont", PuzzFailMessage, true);
 		}

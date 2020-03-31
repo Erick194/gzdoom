@@ -289,16 +289,16 @@ inline float DEG2RAD(float deg)
 	return deg * float(M_PI / 180.0);
 }
 
+inline double DEG2RAD(double deg)
+{
+	return deg * (M_PI / 180.0);
+}
+
 inline float RAD2DEG(float deg)
 {
 	return deg * float(180. / M_PI);
 }
 
-
-template <typename T, size_t N>
-char ( &_ArraySizeHelper( T (&array)[N] ))[N];
-
-#define countof( array ) (sizeof( _ArraySizeHelper( array ) ))
 
 // Auto-registration sections for GCC.
 // Apparently, you cannot do string concatenation inside section attributes.

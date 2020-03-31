@@ -435,7 +435,7 @@ bool EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
 		// if the wrong side of door is pushed, give oof sound
 		if (line->sidedef[1] == NULL)			// killough
 		{
-			S_Sound (thing, CHAN_VOICE, "*usefail", 1, ATTN_NORM);
+			S_Sound (thing, CHAN_VOICE, 0, "*usefail", 1, ATTN_NORM);
 			return false;
 		}
 
@@ -779,6 +779,9 @@ bool EV_SlidingDoor (line_t *line, AActor *actor, int tag, int speed, int delay,
 			}
 			return false;
 		}
+		// Do not attempt to close the door if it already is
+		else if (type == DAnimatedDoor::adClose)
+			return false;
 		FDoorAnimation *anim = TexMan.FindAnimatedDoor (line->sidedef[0]->GetTexture(side_t::top));
 		if (anim != NULL)
 		{
@@ -794,8 +797,20 @@ bool EV_SlidingDoor (line_t *line, AActor *actor, int tag, int speed, int delay,
 		sec = &level.sectors[secnum];
 		if (sec->ceilingdata != NULL)
 		{
+			// Check if the animated door is already open and waiting, if so, close it.
+			if (sec->ceilingdata->IsA (RUNTIME_CLASS(DAnimatedDoor)))
+			{
+				DAnimatedDoor *door = barrier_cast<DAnimatedDoor *>(sec->ceilingdata);
+				if (door->m_Status == DAnimatedDoor::Waiting)
+				{
+					door->StartClosing();
+				}
+			}
 			continue;
 		}
+		// Do not attempt to close the door if it already is
+		else if (type == DAnimatedDoor::adClose)
+			continue;
 
 		for (auto line : sec->Lines)
 		{

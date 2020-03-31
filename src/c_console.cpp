@@ -62,6 +62,7 @@
 #include "g_levellocals.h"
 #include "vm.h"
 #include "utf8.h"
+#include "s_music.h"
 
 
 #include "gi.h"
@@ -551,6 +552,11 @@ CUSTOM_CVAR (Int, msgmidcolor2, 4, CVAR_ARCHIVE)
 	setmsgcolor (PRINTLEVELS+1, self);
 }
 
+FFont * C_GetDefaultHUDFont()
+{
+	return SmallFont;
+}
+
 struct TextQueue
 {
 	TextQueue (bool notify, int printlevel, const char *text)
@@ -792,6 +798,19 @@ void FNotifyBuffer::AddString(int printlevel, FString source)
 		return;
 	}
 
+	// [MK] allow the status bar to take over notify printing
+	if (StatusBar != nullptr)
+	{
+		IFVIRTUALPTR(StatusBar, DBaseStatusBar, ProcessNotify)
+		{
+			VMValue params[] = { (DObject*)StatusBar, printlevel, &source };
+			int rv;
+			VMReturn ret(&rv);
+			VMCall(func, params, countof(params), &ret, 1);
+			if (!!rv) return;
+		}
+	}
+
 	width = DisplayWidth / active_con_scaletext();
 
 	if (AddType == APPENDLINE && Text.Size() > 0 && Text[Text.Size() - 1].PrintLevel == printlevel)
@@ -880,7 +899,7 @@ int PrintString (int printlevel, const char *outline)
 	return 0;	// Don't waste time on calculating this if nothing at all was printed...
 }
 
-extern bool gameisdead;
+bool gameisdead;
 
 int VPrintf (int printlevel, const char *format, va_list parms)
 {
@@ -937,6 +956,12 @@ int DPrintf (int level, const char *format, ...)
 void C_FlushDisplay ()
 {
 	NotifyStrings.Clear();
+	if (StatusBar == nullptr) return;
+	IFVIRTUALPTR(StatusBar, DBaseStatusBar, FlushNotify)
+	{
+		VMValue params[] = { (DObject*)StatusBar };
+		VMCall(func, params, countof(params), nullptr, 1);
+	}
 }
 
 void C_AdjustBottom ()
@@ -1293,6 +1318,7 @@ void C_FullConsole ()
 		gamestate = GS_FULLCONSOLE;
 		level.Music = "";
 		S_Start ();
+		S_StartMusic();
 		P_FreeLevelData ();
 		V_SetBlend (0,0,0,0);
 	}
@@ -1785,36 +1811,32 @@ static const char bar2[] = TEXTCOLOR_RED "\n\35\36\36\36\36\36\36\36\36\36\36\36
 static const char bar3[] = TEXTCOLOR_RED "\n\35\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36"
 						  "\36\36\36\36\36\36\36\36\36\36\36\36\37" TEXTCOLOR_NORMAL "\n";
 
-void C_MidPrint (FFont *font, const char *msg)
+void C_MidPrint (FFont *font, const char *msg, bool bold)
 {
-	if (StatusBar == NULL || screen == NULL)
+	if (StatusBar == nullptr || screen == nullptr)
 		return;
 
-	if (msg != NULL)
+	// [MK] allow the status bar to take over MidPrint
+	IFVIRTUALPTR(StatusBar, DBaseStatusBar, ProcessMidPrint)
+	{
+		FString msgstr = msg;
+		VMValue params[] = { (DObject*)StatusBar, font, &msgstr, bold };
+		int rv;
+		VMReturn ret(&rv);
+		VMCall(func, params, countof(params), &ret, 1);
+		if (!!rv) return;
+	}
+
+	if (msg != nullptr)
 	{
 		AddToConsole (-1, bar1);
 		AddToConsole (-1, msg);
 		AddToConsole (-1, bar3);
 
+		auto color = (EColorRange)PrintColors[bold? PRINTLEVELS+1 : PRINTLEVELS];
+
 		StatusBar->AttachMessage (Create<DHUDMessage>(font, msg, 1.5f, 0.375f, 0, 0,
-			(EColorRange)PrintColors[PRINTLEVELS], con_midtime), MAKE_ID('C','N','T','R'));
-	}
-	else
-	{
-		StatusBar->DetachMessage (MAKE_ID('C','N','T','R'));
-	}
-}
-
-void C_MidPrintBold (FFont *font, const char *msg)
-{
-	if (msg)
-	{
-		AddToConsole (-1, bar2);
-		AddToConsole (-1, msg);
-		AddToConsole (-1, bar3);
-
-		StatusBar->AttachMessage (Create<DHUDMessage> (font, msg, 1.5f, 0.375f, 0, 0,
-			(EColorRange)PrintColors[PRINTLEVELS+1], con_midtime), MAKE_ID('C','N','T','R'));
+			color, con_midtime), MAKE_ID('C','N','T','R'));
 	}
 	else
 	{
@@ -1830,8 +1852,7 @@ DEFINE_ACTION_FUNCTION(_Console, MidPrint)
 	PARAM_BOOL(bold);
 
 	const char *txt = text[0] == '$'? GStrings(&text[1]) : text.GetChars();
-	if (!bold) C_MidPrint(fnt, txt);
-	else C_MidPrintBold(fnt, txt);
+	C_MidPrint(fnt, txt, bold);
 	return 0;
 }
 
@@ -1852,10 +1873,7 @@ struct TabData
 	{
 	}
 
-	TabData(const TabData &other)
-	: UseCount(other.UseCount), TabName(other.TabName)
-	{
-	}
+	TabData(const TabData &other) = default;
 };
 
 static TArray<TabData> TabCommands (TArray<TabData>::NoInit);

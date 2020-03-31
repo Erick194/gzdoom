@@ -52,6 +52,7 @@
 #include "g_levellocals.h"
 #include "vm.h"
 #include "actor.h"
+#include "types.h"
 
 // MACROS ------------------------------------------------------------------
 
@@ -138,6 +139,7 @@ static FCompatOption Options[] =
 	{ "explode1",				COMPATF2_EXPLODE1, SLOT_COMPAT2 },
 	{ "explode2",				COMPATF2_EXPLODE2, SLOT_COMPAT2 },
 	{ "railing",				COMPATF2_RAILING, SLOT_COMPAT2 },
+	{ "scriptwait",				COMPATF2_SCRIPTWAIT, SLOT_COMPAT2 },
 	{ NULL, 0, 0 }
 };
 
@@ -309,37 +311,47 @@ FName CheckCompatibility(MapData *map)
 
 //==========================================================================
 //
-// SetCompatibilityParams
+// PostProcessLevel
 //
 //==========================================================================
 
-class DLevelCompatibility : public DObject
+class DLevelPostProcessor : public DObject
 {
-	DECLARE_ABSTRACT_CLASS(DLevelCompatibility, DObject)
+	DECLARE_ABSTRACT_CLASS(DLevelPostProcessor, DObject)
 };
-IMPLEMENT_CLASS(DLevelCompatibility, true, false);
 
+IMPLEMENT_CLASS(DLevelPostProcessor, true, false);
 
-void SetCompatibilityParams(FName checksum)
+void PostProcessLevel(FName checksum)
 {
-	auto lc = Create<DLevelCompatibility>();
+	auto lc = Create<DLevelPostProcessor>();
 	for (auto cls : PClass::AllClasses)
 	{
-		if (cls->IsDescendantOf(RUNTIME_CLASS(DLevelCompatibility)))
+		if (cls->IsDescendantOf(RUNTIME_CLASS(DLevelPostProcessor)))
 		{
 			PFunction *const func = dyn_cast<PFunction>(cls->FindSymbol("Apply", false));
-			if (func != nullptr)
+			if (func == nullptr)
 			{
-				VMValue param[] = { lc, checksum.GetIndex(), &level.MapName };
-				VMCall(func->Variants[0].Implementation, param, 3, nullptr, 0);
+				Printf("Missing 'Apply' method in class '%s', level compatibility object ignored\n", cls->TypeName.GetChars());
+				continue;
 			}
+
+			auto argTypes = func->Variants[0].Proto->ArgumentTypes;
+			if (argTypes.Size() != 3 || argTypes[1] != TypeName || argTypes[2] != TypeString)
+			{
+				Printf("Wrong signature of 'Apply' method in class '%s', level compatibility object ignored\n", cls->TypeName.GetChars());
+				continue;
+			}
+
+			VMValue param[] = { lc, checksum.GetIndex(), &level.MapName };
+			VMCall(func->Variants[0].Implementation, param, 3, nullptr, 0);
 		}
 	}
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, OffsetSectorPlane)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, OffsetSectorPlane)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_INT(sector);
 	PARAM_INT(planeval);
 	PARAM_FLOAT(delta);
@@ -354,17 +366,17 @@ DEFINE_ACTION_FUNCTION(DLevelCompatibility, OffsetSectorPlane)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, ClearSectorTags)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, ClearSectorTags)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_INT(sector);
 	tagManager.RemoveSectorTags(sector);
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, AddSectorTag)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, AddSectorTag)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_INT(sector);
 	PARAM_INT(tag);
 
@@ -375,20 +387,20 @@ DEFINE_ACTION_FUNCTION(DLevelCompatibility, AddSectorTag)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, ClearLineIDs)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, ClearLineIDs)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_INT(line);
 	tagManager.RemoveLineIDs(line);
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, AddLineID)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, AddLineID)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_INT(line);
 	PARAM_INT(tag);
-	
+
 	if ((unsigned)line < level.lines.Size())
 	{
 		tagManager.AddLineID(line, tag);
@@ -396,27 +408,92 @@ DEFINE_ACTION_FUNCTION(DLevelCompatibility, AddLineID)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetThingSkills)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingCount)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
-	PARAM_INT(thing);
-	PARAM_INT(skillmask);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	ACTION_RETURN_INT(MapThingsConverted.Size());
+}
 
-	if ((unsigned)thing < MapThingsConverted.Size())
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, AddThing)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(ednum);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	PARAM_FLOAT(z);
+	PARAM_INT(angle);
+	PARAM_UINT(skills);
+	PARAM_UINT(flags);
+
+	auto &things = MapThingsConverted;
+	const unsigned newindex = things.Size();
+	things.Resize(newindex + 1);
+
+	auto &newthing = things.Last();
+	memset(&newthing, 0, sizeof newthing);
+
+	newthing.Gravity = 1;
+	newthing.SkillFilter = skills;
+	newthing.ClassFilter = 0xFFFF;
+	newthing.RenderStyle = STYLE_Count;
+	newthing.Alpha = -1;
+	newthing.Health = 1;
+	newthing.FloatbobPhase = -1;
+	newthing.pos.X = x;
+	newthing.pos.Y = y;
+	newthing.pos.Z = z;
+	newthing.angle = angle;
+	newthing.EdNum = ednum;
+	newthing.info = DoomEdMap.CheckKey(ednum);
+	newthing.flags = flags;
+
+	ACTION_RETURN_INT(newindex);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingEdNum)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const int ednum = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].EdNum : 0;
+	ACTION_RETURN_INT(ednum);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingEdNum)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_UINT(ednum);
+
+	if (thing < MapThingsConverted.Size())
 	{
-		MapThingsConverted[thing].SkillFilter = skillmask;
+		auto &mti = MapThingsConverted[thing];
+		mti.EdNum = ednum;
+		mti.info = DoomEdMap.CheckKey(ednum);
 	}
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetThingXY)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingPos)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
-	PARAM_INT(thing);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const DVector3 pos = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].pos
+		: DVector3(0, 0, 0);
+	ACTION_RETURN_VEC3(pos);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingXY)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
 	PARAM_FLOAT(x);
 	PARAM_FLOAT(y);
 
-	if ((unsigned)thing < MapThingsConverted.Size())
+	if (thing < MapThingsConverted.Size())
 	{
 		auto& pos = MapThingsConverted[thing].pos;
 		pos.X = x;
@@ -425,35 +502,185 @@ DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetThingXY)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetThingZ)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingZ)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
-	PARAM_INT(thing);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
 	PARAM_FLOAT(z);
 
-	if ((unsigned)thing < MapThingsConverted.Size())
+	if (thing < MapThingsConverted.Size())
 	{
 		MapThingsConverted[thing].pos.Z = z;
 	}
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetThingFlags)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingAngle)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
-	PARAM_INT(thing);
-	PARAM_INT(flags);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
 
-	if ((unsigned)thing < MapThingsConverted.Size())
+	const int angle = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].angle : 0;
+	ACTION_RETURN_INT(angle);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingAngle)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_INT(angle);
+
+	if (thing < MapThingsConverted.Size())
+	{
+		MapThingsConverted[thing].angle = angle;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingSkills)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const int skills = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].SkillFilter : 0;
+	ACTION_RETURN_INT(skills);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingSkills)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_UINT(skillmask);
+
+	if (thing < MapThingsConverted.Size())
+	{
+		MapThingsConverted[thing].SkillFilter = skillmask;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingFlags)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const unsigned flags = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].flags : 0;
+	ACTION_RETURN_INT(flags);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingFlags)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_UINT(flags);
+
+	if (thing < MapThingsConverted.Size())
 	{
 		MapThingsConverted[thing].flags = flags;
 	}
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetVertex)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingSpecial)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const int special = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].special : 0;
+	ACTION_RETURN_INT(special);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingSpecial)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_INT(special);
+
+	if (thing < MapThingsConverted.Size())
+	{
+		MapThingsConverted[thing].special = special;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingArgument)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_UINT(index);
+
+	const int argument = index < 5 && thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].args[index] : 0;
+	ACTION_RETURN_INT(argument);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingStringArgument)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const FName argument = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].arg0str : NAME_None;
+	ACTION_RETURN_INT(argument);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingArgument)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_UINT(index);
+	PARAM_INT(value);
+
+	if (index < 5 && thing < MapThingsConverted.Size())
+	{
+		MapThingsConverted[thing].args[index] = value;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingStringArgument)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_INT(value);
+
+	if (thing < MapThingsConverted.Size())
+	{
+		MapThingsConverted[thing].arg0str = ENamedName(value);
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetThingID)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+
+	const int id = thing < MapThingsConverted.Size()
+		? MapThingsConverted[thing].thingid : 0;
+	ACTION_RETURN_INT(id);
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetThingID)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(thing);
+	PARAM_INT(id);
+
+	if (thing < MapThingsConverted.Size())
+	{
+		MapThingsConverted[thing].thingid = id;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetVertex)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_UINT(vertex);
 	PARAM_FLOAT(x);
 	PARAM_FLOAT(y);
@@ -466,9 +693,56 @@ DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetVertex)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetLineSectorRef)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetLineVertexes)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(lineidx);
+	PARAM_UINT(vertexidx1);
+	PARAM_UINT(vertexidx2);
+
+	if (lineidx < level.lines.Size() &&
+		vertexidx1 < level.vertexes.Size() &&
+		vertexidx2 < level.vertexes.Size())
+	{
+		line_t *line = &level.lines[lineidx];
+		vertex_t *vertex1 = &level.vertexes[vertexidx1];
+		vertex_t *vertex2 = &level.vertexes[vertexidx2];
+
+		line->v1 = vertex1;
+		line->v2 = vertex2;
+	}
+	ForceNodeBuild = true;
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, FlipLineSideRefs)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
+	PARAM_UINT(lineidx);
+
+	if (lineidx < level.lines.Size())
+	{
+		line_t *line = &level.lines[lineidx];
+		side_t *side1 = line->sidedef[1];
+		side_t *side2 = line->sidedef[0];
+
+		if (!!side1 && !!side2) // don't flip single-sided lines
+		{
+			sector_t *frontsector = line->sidedef[1]->sector;
+			sector_t *backsector = line->sidedef[0]->sector;
+			line->sidedef[0] = side1;
+			line->sidedef[1] = side2;
+			line->frontsector = frontsector;
+			line->backsector = backsector;
+		}
+	}
+	ForceNodeBuild = true;
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, SetLineSectorRef)
+{
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_UINT(lineidx);
 	PARAM_UINT(sideidx);
 	PARAM_UINT(sectoridx);
@@ -487,9 +761,9 @@ DEFINE_ACTION_FUNCTION(DLevelCompatibility, SetLineSectorRef)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(DLevelCompatibility, GetDefaultActor)
+DEFINE_ACTION_FUNCTION(DLevelPostProcessor, GetDefaultActor)
 {
-	PARAM_SELF_PROLOGUE(DLevelCompatibility);
+	PARAM_SELF_PROLOGUE(DLevelPostProcessor);
 	PARAM_NAME(actorclass);
 	ACTION_RETURN_OBJECT(GetDefaultByName(actorclass));
 }

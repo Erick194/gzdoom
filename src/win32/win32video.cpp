@@ -50,7 +50,7 @@
 
 // PRIVATE FUNCTION PROTOTYPES ---------------------------------------------
 
-static void StopFPSLimit();
+void StopFPSLimit();
 
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
@@ -111,7 +111,7 @@ void I_SetFPSLimit(int limit)
 				return;
 			}
 		}
-		atterm(StopFPSLimit);
+
 		// Set timer event as close as we can to limit/sec, in milliseconds.
 		UINT period = 1000 / limit;
 		FPSLimitTimer = timeSetEvent(period, 0, (LPTIMECALLBACK)FPSLimitEvent, 0, TIME_PERIODIC | TIME_CALLBACK_EVENT_SET);
@@ -134,7 +134,7 @@ void I_SetFPSLimit(int limit)
 //
 //==========================================================================
 
-static void StopFPSLimit()
+void StopFPSLimit()
 {
 	I_SetFPSLimit(0);
 }

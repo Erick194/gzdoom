@@ -211,7 +211,7 @@ void FModelRenderer::RenderHUDModel(DPSprite *psp, float ofsX, float ofsY)
 	float orientation = smf->xscale * smf->yscale * smf->zscale;
 
 	BeginDrawHUDModel(playermo, objectToWorldMatrix, orientation < 0);
-	RenderFrameModels(smf, psp->GetState(), psp->GetTics(), playermo->player->ReadyWeapon->GetClass(), 0);
+	RenderFrameModels(smf, psp->GetState(), psp->GetTics(), playermo->player->ReadyWeapon->GetClass(), psp->Flags & PSPF_PLAYERTRANSLATED ? psp->Owner->mo->Translation : 0);
 	EndDrawHUDModel(playermo);
 }
 
@@ -251,13 +251,13 @@ void FModelRenderer::RenderFrameModels(const FSpriteModelFrame *smf, const FStat
 						inter /= 2.;
 						inter += 0.5;
 					}
-					if ((curState->sprite == nextState->sprite) && (curState->Frame == nextState->Frame))
+					if (nextState && ((curState->sprite == nextState->sprite) && (curState->Frame == nextState->Frame)))
 					{
 						inter /= 2.;
 						nextState = nextState->GetNextState();
 					}
 				}
-				if (inter != 0.0)
+				if (nextState && inter != 0.0)
 					smfNext = FindModelFrame(ti, nextState->sprite, nextState->Frame, false);
 			}
 		}

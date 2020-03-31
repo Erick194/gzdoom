@@ -912,6 +912,9 @@ void InitLowerUpper()
 		if (upperforlower[lower] == lower) upperforlower[lower] = upper;
 		isuppermap[upper] = islowermap[lower] = true;
 	}
+	// Special treatment for the two variants of the small sigma in Greek.
+	islowermap[0x3c2] = true;
+	upperforlower[0x3c2] = 0x3a3;
 }
 
 
@@ -921,7 +924,13 @@ bool myislower(int code)
 	return false;
 }
 
-// Returns a character without an accent mark (or one with a similar looking accent in some cases where direct support is unlikely.
+bool myisupper(int code)
+{
+	if (code >= 0 && code < 65536) return isuppermap[code];
+	return false;
+}
+
+// Returns a character without an accent mark (or one with a similar looking accent in some cases where direct support is unlikely).
 
 int stripaccent(int code)
 {
@@ -990,6 +999,9 @@ int stripaccent(int code)
 		case 0x201e:
 			return '"';	// typographic quotation marks
 			
+		case 0x3c2:
+			return 0x3c3;	// Lowercase Sigma character in Greek, which changes depending on its positioning in a word; if the font is uppercase only or features a smallcaps style, the second variant of the letter will remain unused
+			
 			// Cyrillic characters with equivalents in the Latin alphabet.
 		case 0x400:
 			return 0xc8;
@@ -1008,7 +1020,7 @@ int stripaccent(int code)
 			
 		case 0x408:
 			return 'J';
-
+			
 		case 0x450:
 			return 0xe8;
 			
@@ -1026,7 +1038,7 @@ int stripaccent(int code)
 			
 		case 0x458:
 			return 'j';
-
+			
 	}
 
 	// skip the rest of Latin characters because none of them are relevant for modern languages.
@@ -1119,6 +1131,7 @@ FFont::FFont (const char *name, const char *nametemplate, const char *filetempla
 	ActiveColors = 0;
 	SpaceWidth = 0;
 	FontHeight = 0;
+	int FixedWidth = 0; // hack
 
 	maxyoffs = 0;
 
@@ -1179,6 +1192,14 @@ FFont::FFont (const char *name, const char *nametemplate, const char *filetempla
 						sc.MustGetValue(false);
 						FontHeight = sc.Number;
 					}
+					else if (sc.Compare("CellSize")) // hack
+					{
+						sc.MustGetValue(false);
+						FixedWidth = sc.Number;
+						sc.MustGetToken(',');
+						sc.MustGetValue(false);
+						FontHeight = sc.Number;
+					}
 				}
 			}
 		}
@@ -1189,7 +1210,7 @@ FFont::FFont (const char *name, const char *nametemplate, const char *filetempla
 	{
 		for (i = 0; i < lcount; i++)
 		{
-			int position = '!' + i;
+			int position = lfirst + i;
 			mysnprintf(buffer, countof(buffer), nametemplate, i + start);
 			
 			lump = TexMan.CheckForTexture(buffer, ETextureType::MiscPatch);
@@ -1628,7 +1649,7 @@ int FFont::GetCharCode(int code, bool needpic) const
 		return code;
 	}
 	
-	// Special handling for the ÃŸ which may only exist as lowercase, so for this we need an additional upper -> lower check for all fonts aside from the generic substitution logic.
+	// Special handling for the ß which may only exist as lowercase, so for this we need an additional upper -> lower check for all fonts aside from the generic substitution logic.
 	if (code == 0x1e9e)
 	{
 		if (LastChar <= 0xdf && (!needpic || Chars[0xdf - FirstChar].Pic != nullptr))
@@ -1785,6 +1806,53 @@ int FFont::StringWidth(const uint8_t *string) const
 	}
 
 	return MAX(maxw, w);
+}
+
+//==========================================================================
+//
+// Get the largest ascender in the first line of this text.
+//
+//==========================================================================
+
+int FFont::GetMaxAscender(const uint8_t* string) const
+{
+	int retval = 0;
+
+	while (*string)
+	{
+		auto chr = GetCharFromString(string);
+		if (chr == TEXTCOLOR_ESCAPE)
+		{
+			// We do not need to check for UTF-8 in here.
+			if (*string == '[')
+			{
+				while (*string != '\0' && *string != ']')
+				{
+					++string;
+				}
+			}
+			if (*string != '\0')
+			{
+				++string;
+			}
+			continue;
+		}
+		else if (chr == '\n')
+		{
+			break;
+		}
+		else
+		{
+			auto ctex = GetChar(chr, nullptr);
+			if (ctex)
+			{
+				auto offs = int(ctex->GetScaledTopOffset(0));
+				if (offs > retval) retval = offs;
+			}
+		}
+	}
+
+	return retval;
 }
 
 //==========================================================================
@@ -3531,7 +3599,7 @@ void V_InitFonts()
 	}
 	if (!(SmallFont2 = V_GetFont("SmallFont2")))	// Only used by Strife
 	{
-		if (Wads.CheckNumForName ("STBFN033", ns_graphics) >= 0)
+		if (Wads.CheckNumForName("STBFN033", ns_graphics) >= 0)
 		{
 			SmallFont2 = new FFont("SmallFont2", "STBFN%.3d", "defsmallfont2", HU_FONTSTART, HU_FONTSIZE, HU_FONTSTART, -1);
 		}
@@ -3542,10 +3610,16 @@ void V_InitFonts()
 
 	if (!(BigFont = V_GetFont("BigFont")))
 	{
-		if (gameinfo.gametype & GAME_Raven)
+		if (Wads.CheckNumForName("FONTB_S") >= 0)
 		{
 			BigFont = new FFont("BigFont", "FONTB%02u", "defbigfont", HU_FONTSTART, HU_FONTSIZE, 1, -1);
 		}
+	}
+
+	if (!BigFont)
+	{
+		// Load the generic fallback if no BigFont is found.
+		BigFont = V_GetFont("BigFont", "ZBIGFONT");
 	}
 
 	// let PWAD BIGFONTs override the stock BIGUPPER font. (This check needs to be made smarter.)
@@ -3595,6 +3669,7 @@ void V_InitFonts()
 	}
 	// hack hack
 	NewConsoleFont = ConFont;
+	CurrentConsoleFont = ConFont;
 	NewSmallFont = SmallFont;
 	AlternativeSmallFont = SmallFont;
 	OriginalSmallFont = SmallFont;

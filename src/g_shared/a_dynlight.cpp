@@ -107,6 +107,7 @@ static FDynamicLight *GetLight()
 	}
 	else ret = (FDynamicLight*)DynLightArena.Alloc(sizeof(FDynamicLight));
 	memset(ret, 0, sizeof(*ret));
+	ret->m_cycler.m_increment = true;
 	ret->next = level.lights;
 	level.lights = ret;
 	if (ret->next) ret->next->prev = ret;
@@ -141,6 +142,9 @@ void AttachLight(AActor *self)
 	light->visibletoplayer = true;
 	light->lighttype = (uint8_t)self->IntVar(NAME_lighttype);
 	self->AttachedLights.Push(light);
+
+	// Disable postponed processing of dynamic light because its setup has been completed by this function
+	self->flags8 &= ~MF8_RECREATELIGHTS;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(ADynamicLight, AttachLight, AttachLight)
@@ -357,7 +361,7 @@ void FDynamicLight::Tick()
 		
 		if (scale == 0.f) scale = 1.f;
 		
-		intensity = Sector->lightlevel * scale;
+		intensity = Sector? Sector->lightlevel * scale : 0;
 		intensity = clamp<float>(intensity, 0.f, 255.f);
 		
 		m_currentRadius = intensity;
@@ -779,17 +783,17 @@ void AActor::SetDynamicLights()
 	unsigned int count = 0;
 
 	if (state == NULL) return;
-	if (LightAssociations.Size() > 0)
-	{
-		unsigned int i;
 
-		for (i = 0; i < LightAssociations.Size(); i++)
+	for (const auto def : UserLights)
+	{
+		AttachLight(count++, def);
+	}
+
+	for (const auto asso : LightAssociations)
+	{
+		if (asso->Sprite() == sprite && (asso->Frame() == frame || asso->Frame() == -1))
 		{
-			if (LightAssociations[i]->Sprite() == sprite &&
-				(LightAssociations[i]->Frame()==frame || LightAssociations[i]->Frame()==-1))
-			{
-				AttachLight(count++, LightAssociations[i]->Light());
-			}
+			AttachLight(count++, asso->Light());
 		}
 	}
 	if (count == 0 && state->Light > 0)
@@ -824,6 +828,147 @@ void AActor::DeleteAttachedLights()
 	}
 	AttachedLights.Clear();
 }
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+extern TDeletingArray<FLightDefaults *> LightDefaults;
+
+unsigned FindUserLight(AActor *self, FName id, bool create = false)
+{
+	for (unsigned i = 0; i < self->UserLights.Size(); i++ )
+	{
+		if (self->UserLights[i]->GetName() == id) return i;
+	}
+	if (create)
+	{
+		auto li = new FLightDefaults(id);
+		return self->UserLights.Push(li);
+	}
+	return ~0u;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+int AttachLightDef(AActor *self, int _lightid, int _lightname)
+{
+	FName lightid = FName(ENamedName(_lightid));
+	FName lightname = FName(ENamedName(_lightname));
+	
+	// Todo: Optimize. This may be too slow.
+	auto lightdef = LightDefaults.FindEx([=](const auto &a) {
+		return a->GetName() == lightname;
+	});
+	if (lightdef < LightDefaults.Size())
+	{
+		auto userlight = self->UserLights[FindUserLight(self, lightid, true)];
+		userlight->CopyFrom(*LightDefaults[lightdef]);
+		self->flags8 |= MF8_RECREATELIGHTS;
+		return 1;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_AttachLightDef, AttachLightDef)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_NAME(lightid);
+	PARAM_NAME(lightname);
+	ACTION_RETURN_BOOL(AttachLightDef(self, lightid.GetIndex(), lightname.GetIndex()));
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+int AttachLightDirect(AActor *self, int _lightid, int type, int color, int radius1, int radius2, int flags, double ofs_x, double ofs_y, double ofs_z, double param, double spoti, double spoto, double spotp)
+{
+	FName lightid = FName(ENamedName(_lightid));
+	auto userlight = self->UserLights[FindUserLight(self, lightid, true)];
+	userlight->SetType(ELightType(type));
+	userlight->SetArg(LIGHT_RED, RPART(color));
+	userlight->SetArg(LIGHT_GREEN, GPART(color));
+	userlight->SetArg(LIGHT_BLUE, BPART(color));
+	userlight->SetArg(LIGHT_INTENSITY, radius1);
+	userlight->SetArg(LIGHT_SECONDARY_INTENSITY, radius2);
+	userlight->SetFlags(LightFlags::FromInt(flags));
+	float of[] = { float(ofs_x), float(ofs_z), float(ofs_y)};
+	userlight->SetOffset(of);
+	userlight->SetParameter(type == PulseLight? param*TICRATE : param*360.);
+	userlight->SetSpotInnerAngle(spoti);
+	userlight->SetSpotOuterAngle(spoto);
+	if (spotp >= -90. && spotp <= 90.)
+	{
+		userlight->SetSpotPitch(spotp);
+	}
+	else
+	{
+		userlight->UnsetSpotPitch();
+	}
+	self->flags8 |= MF8_RECREATELIGHTS;
+	return 1;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_AttachLight, AttachLightDirect)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_NAME(lightid);
+	PARAM_INT(type);
+	PARAM_INT(color);
+	PARAM_INT(radius1);
+	PARAM_INT(radius2);
+	PARAM_INT(flags);
+	PARAM_FLOAT(ofs_x);
+	PARAM_FLOAT(ofs_y);
+	PARAM_FLOAT(ofs_z);
+	PARAM_FLOAT(parami);
+	PARAM_FLOAT(spoti);
+	PARAM_FLOAT(spoto);
+	PARAM_FLOAT(spotp);
+	ACTION_RETURN_BOOL(AttachLightDirect(self, lightid, type, color, radius1, radius2, flags, ofs_x, ofs_y, ofs_z, parami, spoti, spoto, spotp));
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+int RemoveLight(AActor *self, int _lightid)
+{
+	FName lightid = FName(ENamedName(_lightid));
+	auto userlight = FindUserLight(self, lightid, false);
+	if (userlight < self->UserLights.Size())
+	{
+		delete self->UserLights[userlight];
+		self->UserLights.Delete(userlight);
+		self->flags8 |= MF8_RECREATELIGHTS;
+		return 1;
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_RemoveLight, RemoveLight)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_NAME(lightid);
+	ACTION_RETURN_BOOL(RemoveLight(self, lightid));
+}
+
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
 
 //==========================================================================
 //
@@ -952,5 +1097,4 @@ CCMD(listsublights)
 		Printf(PRINT_LOG, "Subsector %d - %d lights\n", sub.Index(), lights);
 	}
 }
-
 

@@ -54,6 +54,7 @@ struct FPortalGroupArray;
 struct visstyle_t;
 class FLightDefaults;
 struct FDynamicLight;
+
 //
 // NOTES: AActor
 //
@@ -407,6 +408,9 @@ enum ActorFlag8
 	MF8_HITOWNER		= 0x00000010,	// projectile can hit the actor that fired it
 	MF8_NOFRICTION		= 0x00000020,	// friction doesn't apply to the actor at all
 	MF8_NOFRICTIONBOUNCE	= 0x00000040,	// don't bounce off walls when on icy floors
+	MF8_RETARGETAFTERSLAM	= 0x00000080,	// Forces jumping to the idle state after slamming into something
+	MF8_RECREATELIGHTS	= 0x00000100,	// Internal flag that signifies that the light attachments need to be recreated at the
+	MF8_STOPRAILS		= 0x00000200,	// [MC] Prevent rails from going further if an actor has this flag.
 };
 
 // --- mobj.renderflags ---
@@ -669,7 +673,7 @@ public:
 	// Adjusts the angle for deflection/reflection of incoming missiles
 	// Returns true if the missile should be allowed to explode anyway
 	bool AdjustReflectionAngle (AActor *thing, DAngle &angle);
-	int AbsorbDamage(int damage, FName dmgtype);
+	int AbsorbDamage(int damage, FName dmgtype, AActor *inflictor, AActor *source, int flags);
 	void AlterWeaponSprite(visstyle_t *vis);
 
 	// Returns true if this actor is within melee range of its target
@@ -752,7 +756,7 @@ public:
 	void ClearInventory();
 
 	// Returns true if this view is considered "local" for the player.
-	bool CheckLocalView (int playernum) const;
+	bool CheckLocalView() const;
 
 	// Finds the first item of a particular type.
 	AActor *FindInventory (PClassActor *type, bool subclass=false);
@@ -1232,6 +1236,7 @@ public:
 	DRotator PrevAngles;
 	int PrevPortalGroup;
 	TArray<FDynamicLight *> AttachedLights;
+	TDeletingArray<FLightDefaults *> UserLights;
 
 	// When was this actor spawned?
 	int SpawnTime;
@@ -1240,13 +1245,15 @@ public:
 
 	// ThingIDs
 	static void ClearTIDHashes ();
+	void SetTID (int newTID);
+
+private:
 	void AddToHash ();
 	void RemoveFromHash ();
 
-
-private:
 	static AActor *TIDHash[128];
 	static inline int TIDHASH (int key) { return key & 127; }
+
 public:
 	static FSharedStringArena mStringPropertyData;
 private:

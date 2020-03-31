@@ -45,6 +45,9 @@
 #include "gameconfigfile.h"
 #include "m_argv.h"
 #include "i_soundfont.h"
+#include "teaminfo.h"
+#include "r_data/sprites.h"
+#include "zmusic/zmusic.h"
 
 
 
@@ -131,6 +134,7 @@ DEFINE_ACTION_FUNCTION(FOptionValues, GetText)
 
 void DeinitMenus()
 {
+	M_ClearMenus();
 	{
 		FOptionMap::Iterator it(OptionValues);
 
@@ -144,7 +148,6 @@ void DeinitMenus()
 	}
 	MenuDescriptors.Clear();
 	OptionValues.Clear();
-	CurrentMenu = nullptr;
 	savegameManager.ClearSaveGames();
 }
 
@@ -198,7 +201,7 @@ static bool CheckSkipGameBlock(FScanner &sc)
 	if (!filter)
 	{
 		SkipSubBlock(sc);
-		return true;
+		return !sc.CheckString("else");
 	}
 	return false;
 }
@@ -1004,9 +1007,6 @@ void M_ParseMenuDefs()
 	DefaultListMenuSettings->Reset();
 	DefaultOptionMenuSettings->Reset();
 
-	atterm(	DeinitMenus);
-	DeinitMenus();
-
 	int IWADMenu = Wads.CheckNumForName("MENUDEF", ns_global, Wads.GetIwadNum());
 
 	while ((lump = Wads.FindLump ("MENUDEF", &lastlump)) != -1)
@@ -1505,6 +1505,95 @@ void M_CreateMenus()
 	{
 		I_BuildALResamplersList(*opt);
 	}
+	opt = OptionValues.CheckKey(NAME_PlayerTeam);
+	if (opt != nullptr)
+	{
+		auto op = *opt; 
+		op->mValues.Resize(Teams.Size() + 1);
+		op->mValues[0].Value = 0;
+		op->mValues[0].Text = "$OPTVAL_NONE";
+		for (unsigned i = 0; i < Teams.Size(); i++)
+		{
+			op->mValues[i+1].Value = i+1;
+			op->mValues[i+1].Text = Teams[i].GetName();
+		}
+	}
+	opt = OptionValues.CheckKey(NAME_PlayerClass);
+	if (opt != nullptr)
+	{
+		auto op = *opt;
+		int o = 0;
+		if (!gameinfo.norandomplayerclass && PlayerClasses.Size() > 1)
+		{
+			op->mValues.Resize(PlayerClasses.Size()+1);
+			op->mValues[0].Value = -1;
+			op->mValues[0].Text = "$MNU_RANDOM";
+			o = 1;
+		}
+		else op->mValues.Resize(PlayerClasses.Size());
+		for (unsigned i = 0; i < PlayerClasses.Size(); i++)
+		{
+			op->mValues[i+o].Value = i;
+			op->mValues[i+o].Text = GetPrintableDisplayName(PlayerClasses[i].Type);
+		}
+	}
+}
+
+
+DEFINE_ACTION_FUNCTION(DMenu, UpdateColorsets)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(playerClass, FPlayerClass);
+
+	TArray<int> PlayerColorSets;
+
+	EnumColorSets(playerClass->Type, &PlayerColorSets);
+
+	auto opt = OptionValues.CheckKey(NAME_PlayerColors);
+	if (opt != nullptr)
+	{
+		auto op = *opt;
+		op->mValues.Resize(PlayerColorSets.Size() + 1);
+		op->mValues[0].Value = -1;
+		op->mValues[0].Text = "$OPTVAL_CUSTOM";
+		for (unsigned i = 0; i < PlayerColorSets.Size(); i++)
+		{
+			auto cset = GetColorSet(playerClass->Type, PlayerColorSets[i]);
+			op->mValues[i + 1].Value = PlayerColorSets[i];
+			op->mValues[i + 1].Text = cset? cset->Name.GetChars() : "?";	// The null case should never happen here.
+		}
+	}
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DMenu, UpdateSkinOptions)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(playerClass, FPlayerClass);
+
+	auto opt = OptionValues.CheckKey(NAME_PlayerSkin);
+	if (opt != nullptr)
+	{
+		auto op = *opt;
+
+		if ((GetDefaultByType(playerClass->Type)->flags4 & MF4_NOSKIN) || players[consoleplayer].userinfo.GetPlayerClassNum() == -1)
+		{
+			op->mValues.Resize(1);
+			op->mValues[0].Value = -1;
+			op->mValues[0].Text = "$OPTVAL_DEFAULT";
+		}
+		else
+		{
+			op->mValues.Clear();
+			for (unsigned i = 0; i < Skins.Size(); i++)
+			{
+				op->mValues.Reserve(1);
+				op->mValues.Last().Value = i;
+				op->mValues.Last().Text = Skins[i].Name;
+			}
+		}
+	}
+	return 0;
 }
 
 //=============================================================================

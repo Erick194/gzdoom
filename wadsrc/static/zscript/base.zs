@@ -48,7 +48,7 @@ struct _ native	// These are the global variables, the struct is only here to av
 	native readonly int Net_Arbitrator;
 	native ui BaseStatusBar StatusBar;
 	native readonly Weapon WP_NOCHANGE;
-	deprecated("3.8") native readonly bool globalfreeze;
+	deprecated("3.8", "Use Actor.isFrozen() or Level.isFrozen() instead") native readonly bool globalfreeze;
 	native int LocalViewPitch;
 	native readonly @MusPlayingInfo musplaying;
 	native readonly bool generic_ui;
@@ -184,7 +184,17 @@ enum DrawTextureTags
 	DTA_Internal3,
 	DTA_Spacing,			// Strings only: Additional spacing between characters
 	DTA_Monospace,			// Strings only: Use a fixed distance between characters.
+
+	DTA_FullscreenEx,		// advanced fullscreen control.
 };
+
+class Shape2DTransform : Object native
+{
+	native void Clear();
+	native void Rotate(double angle);
+	native void Scale(Vector2 scaleVec);
+	native void Translate(Vector2 translateVec);
+}
 
 class Shape2D : Object native
 {
@@ -194,6 +204,8 @@ class Shape2D : Object native
 		C_Coords = 2,
 		C_Indices = 4,
 	};
+
+	native void SetTransform(Shape2DTransform transform);
 
 	native void Clear( int which = C_Verts|C_Coords|C_Indices );
 	native void PushVertex( Vector2 v );
@@ -225,7 +237,7 @@ struct Screen native
 	
 	
 	// This is a leftover of the abandoned Inventory.DrawPowerup method.
-	deprecated("2.5") static ui void DrawHUDTexture(TextureID tex, double x, double y)
+	deprecated("2.5", "Use StatusBar.DrawTexture() instead") static ui void DrawHUDTexture(TextureID tex, double x, double y)
 	{
 		statusBar.DrawTexture(tex, (x, y), BaseStatusBar.DI_SCREEN_RIGHT_TOP, 1., (32, 32));
 	}
@@ -303,8 +315,10 @@ struct Font native
 
 	native int GetCharWidth(int code);
 	native int StringWidth(String code);
+	native int GetMaxAscender(String code);
 	native bool CanPrint(String code);
 	native int GetHeight();
+	int GetDisplacement() { return 0; } // hack hack
 	native String GetCursor();
 
 	native static int FindFontColor(Name color);
@@ -384,6 +398,8 @@ struct GameInfoStruct native
 	native GIFont mStatscreenMapNameFont;
 	native GIFont mStatscreenEnteringFont;
 	native GIFont mStatscreenFinishedFont;
+	native GIFont mStatscreenContentFont;
+	native GIFont mStatscreenAuthorFont;
 	native double gibfactor;
 	native bool intermissioncounter;
 	native Name mSliderColor;
@@ -417,7 +433,8 @@ class Object native
 	native static double G_SkillPropertyFloat(int p);
 	native static vector3, int G_PickDeathmatchStart();
 	native static vector3, int G_PickPlayerStart(int pnum, int flags = 0);
-	native static void S_Sound (Sound sound_id, int channel, float volume = 1, float attenuation = ATTN_NORM);
+	deprecated("4.3", "Use S_StartSound() instead") native static void S_Sound (Sound sound_id, int channel, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0);
+	native static void S_StartSound (Sound sound_id, int channel, int flags = 0, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
 	native static void S_PauseSound (bool notmusic, bool notsfx);
 	native static void S_ResumeSound (bool notsfx);
 	native static bool S_ChangeMusic(String music_name, int order = 0, bool looping = true, bool force = false);
@@ -586,7 +603,7 @@ struct TraceResults native
 	native bool unlinked;		// passed through a portal without static offset.
 
 	native ETraceResult HitType;
-	// F3DFloor *ffloor;
+	native F3DFloor ffloor;
 
 	native Sector CrossedWater;		// For Boom-style, Transfer_Heights-based deep water
 	native vector3 CrossedWaterPos;	// remember the position so that we can use it for spawning the splash
@@ -654,6 +671,7 @@ struct LevelLocals native
 	native String NextSecretMap;
 	native readonly String F1Pic;
 	native readonly int maptype;
+	native readonly String AuthorName;
 	native readonly String Music;
 	native readonly int musicorder;
 	native readonly TextureID skytexture1;
@@ -682,7 +700,7 @@ struct LevelLocals native
 	native readonly bool polygrind;
 	native readonly bool nomonsters;
 	native readonly bool allowrespawn;
-	deprecated("3.8") native bool frozen;
+	deprecated("3.8", "Use Level.isFrozen() instead") native bool frozen;
 	native readonly bool infinite_flight;
 	native readonly bool no_dlg_freeze;
 	native readonly bool keepfullinventory;
@@ -691,6 +709,7 @@ struct LevelLocals native
 	native readonly int outsidefogdensity;
 	native readonly int skyfog;
 	native readonly float pixelstretch;
+	native readonly float MusicVolume;
 	native name deathsequence;
 	native readonly int compatflags;
 	native readonly int compatflags2;
@@ -758,6 +777,9 @@ struct LevelLocals native
 	{
 		return Floor.CreateFloor(sec, floortype, ln, speed, height, crush, change, crushmode, hereticlower);
 	}
+
+	native static void ExitLevel(int position, bool keepFacing);
+	native static void SecretExitLevel(int position);
 }
 
 struct StringTable native
@@ -802,10 +824,6 @@ struct State native
 	native bool InStateSequence(State base);
 }
 
-struct F3DFloor native
-{
-}
-
 struct Wads
 {
 	enum WadNamespace
@@ -844,6 +862,11 @@ struct Wads
 	native static int CheckNumForFullName(string name);
 	native static int FindLump(string name, int startlump = 0, FindLumpNamespace ns = GlobalNamespace);
 	native static string ReadLump(int lump);
+
+	native static int GetNumLumps();
+	native static string GetLumpName(int lump);
+	native static string GetLumpFullName(int lump);
+	native static int GetLumpNamespace(int lump);
 }
 
 struct TerrainDef native
@@ -861,6 +884,7 @@ struct TerrainDef native
 	native Sound RightStepSound;
 	native bool IsLiquid;
 	native bool AllowProtection;
+	native bool DamageOnLand;
 	native double Friction;
 	native double MoveFactor;
 };
@@ -888,15 +912,15 @@ struct StringStruct native
 	native String Mid(int pos = 0, int len = 2147483647) const;
 	native void Truncate(int newlen);
 	native void Remove(int index, int remlen);
-	deprecated("4.1") native String CharAt(int pos) const;
-	deprecated("4.1") native int CharCodeAt(int pos) const;
+	deprecated("4.1", "use Left() or Mid() instead") native String CharAt(int pos) const;
+	deprecated("4.1", "use ByteAt() instead") native int CharCodeAt(int pos) const;
 	native int ByteAt(int pos) const;
 	native String Filter();
 	native int IndexOf(String substr, int startIndex = 0) const;
-	deprecated("3.5.1") native int LastIndexOf(String substr, int endIndex = 2147483647) const;
+	deprecated("3.5.1", "use RightIndexOf() instead") native int LastIndexOf(String substr, int endIndex = 2147483647) const;
 	native int RightIndexOf(String substr, int endIndex = 2147483647) const;
-	deprecated("4.1") native void ToUpper();
-	deprecated("4.1") native void ToLower();
+	deprecated("4.1", "use MakeUpper() instead") native void ToUpper();
+	deprecated("4.1", "use MakeLower() instead") native void ToLower();
 	native String MakeUpper() const;
 	native String MakeLower() const;
 	native static int CharUpper(int ch);

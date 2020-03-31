@@ -386,7 +386,7 @@ DEFINE_ACTION_FUNCTION(AActor, GetCVar)
 		PARAM_SELF_PROLOGUE(AActor);
 		PARAM_STRING(cvarname);
 
-		FBaseCVar *cvar = GetCVar(self, cvarname);
+		FBaseCVar *cvar = GetCVar(self->player ? int(self->player - players) : -1, cvarname);
 		if (cvar == nullptr)
 		{
 			ret->SetFloat(0);
@@ -416,7 +416,7 @@ DEFINE_ACTION_FUNCTION(AActor, GetCVarString)
 		PARAM_SELF_PROLOGUE(AActor);
 		PARAM_STRING(cvarname);
 
-		FBaseCVar *cvar = GetCVar(self, cvarname);
+		FBaseCVar *cvar = GetCVar(self->player? int(self->player - players) : -1, cvarname);
 		if (cvar == nullptr)
 		{
 			ret->SetString("");
@@ -718,13 +718,13 @@ DEFINE_ACTION_FUNCTION(AActor, A_PlaySoundEx)
 
 	if (!looping)
 	{
-		S_Sound (self, int(channel) - NAME_Auto, soundid, 1, attenuation);
+		S_Sound (self, int(channel) - NAME_Auto, 0, soundid, 1, attenuation);
 	}
 	else
 	{
 		if (!S_IsActorPlayingSomething (self, int(channel) - NAME_Auto, soundid))
 		{
-			S_Sound (self, (int(channel) - NAME_Auto) | CHAN_LOOP, soundid, 1, attenuation);
+			S_Sound (self, (int(channel) - NAME_Auto), CHANF_LOOP, soundid, 1, attenuation);
 		}
 	}
 	return 0;
@@ -794,7 +794,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_BulletAttack)
 
 	DAngle slope = P_AimLineAttack (self, self->Angles.Yaw, MISSILERANGE);
 
-	S_Sound (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
+	S_Sound (self, CHAN_WEAPON, 0, self->AttackSound, 1, ATTN_NORM);
 	for (i = self->GetMissileDamage (0, 1); i > 0; --i)
     {
 		DAngle angle = self->Angles.Yaw + pr_cabullet.Random2() * (5.625 / 256.);
@@ -1078,7 +1078,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_CustomMeleeAttack)
 	if (self->CheckMeleeRange ())
 	{
 		if (meleesound)
-			S_Sound (self, CHAN_WEAPON, meleesound, 1, ATTN_NORM);
+			S_Sound (self, CHAN_WEAPON, 0, meleesound, 1, ATTN_NORM);
 		int newdam = P_DamageMobj (self->target, self, self, damage, damagetype);
 		if (bleed)
 			P_TraceBleed (newdam > 0 ? newdam : damage, self->target, self);
@@ -1086,7 +1086,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_CustomMeleeAttack)
 	else
 	{
 		if (misssound)
-			S_Sound (self, CHAN_WEAPON, misssound, 1, ATTN_NORM);
+			S_Sound (self, CHAN_WEAPON, 0, misssound, 1, ATTN_NORM);
 	}
 	return 0;
 }
@@ -1115,7 +1115,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_CustomComboAttack)
 		if (damagetype == NAME_None)
 			damagetype = NAME_Melee;	// Melee is the default type
 		if (meleesound)
-			S_Sound (self, CHAN_WEAPON, meleesound, 1, ATTN_NORM);
+			S_Sound (self, CHAN_WEAPON, 0, meleesound, 1, ATTN_NORM);
 		int newdam = P_DamageMobj (self->target, self, self, damage, damagetype);
 		if (bleed)
 			P_TraceBleed (newdam > 0 ? newdam : damage, self->target, self);
@@ -1297,8 +1297,8 @@ DEFINE_ACTION_FUNCTION(AActor, A_Print)
 	PARAM_NAME	(fontname);
 
 	if (text[0] == '$') text = GStrings(&text[1]);
-	if (self->CheckLocalView (consoleplayer) ||
-		(self->target != NULL && self->target->CheckLocalView (consoleplayer)))
+	if (self->CheckLocalView() ||
+		(self->target != NULL && self->target->CheckLocalView()))
 	{
 		float saved = con_midtime;
 		FFont *font = NULL;
@@ -1344,7 +1344,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_PrintBold)
 		con_midtime = float(time);
 	}
 	FString formatted = strbin1(text);
-	C_MidPrintBold(font != NULL ? font : SmallFont, formatted.GetChars());
+	C_MidPrint(font != NULL ? font : SmallFont, formatted.GetChars(), true);
 	con_midtime = saved;
 	return 0;
 }
@@ -1361,7 +1361,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_Log)
 	PARAM_STRING_VAL(text);
 	PARAM_BOOL(local);
 
-	if (local && !self->CheckLocalView(consoleplayer)) return 0;
+	if (local && !self->CheckLocalView()) return 0;
 
 	if (text[0] == '$') text = GStrings(&text[1]);
 	FString formatted = strbin1(text);
@@ -1381,7 +1381,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_LogInt)
 	PARAM_INT(num);
 	PARAM_BOOL(local);
 
-	if (local && !self->CheckLocalView(consoleplayer)) return 0;
+	if (local && !self->CheckLocalView()) return 0;
 	Printf("%d\n", num);
 	return 0;
 }
@@ -1398,7 +1398,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_LogFloat)
 	PARAM_FLOAT(num);
 	PARAM_BOOL(local);
 
-	if (local && !self->CheckLocalView(consoleplayer)) return 0;
+	if (local && !self->CheckLocalView()) return 0;
 	IGNORE_FORMAT_PRE
 	Printf("%H\n", num);
 	IGNORE_FORMAT_POST
@@ -3414,7 +3414,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_WolfAttack)
 	}
 
 	// And finally, let's play the sound
-	S_Sound (self, CHAN_WEAPON, sound, 1, ATTN_NORM);
+	S_Sound (self, CHAN_WEAPON, 0, sound, 1, ATTN_NORM);
 	return 0;
 }
 
@@ -3805,7 +3805,7 @@ static void DoDamage(AActor *dmgtarget, AActor *inflictor, AActor *source, int a
 	
 		if (amount > 0)
 		{ //Should wind up passing them through just fine.
-			if (flags & DMSS_INFLICTORDMGTYPE)
+			if (inflictor && (flags & DMSS_INFLICTORDMGTYPE))
 				DamageType = inflictor->DamageType;
 
 			P_DamageMobj(dmgtarget, inflictor, source, amount, DamageType, dmgFlags);
@@ -4920,7 +4920,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_SetMugshotState)
 {
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_STRING(name);
-	if (self->CheckLocalView(consoleplayer))
+	if (self->CheckLocalView())
 		StatusBar->SetMugShotState(name);
 	return 0;
 }

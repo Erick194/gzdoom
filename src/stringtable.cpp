@@ -43,6 +43,7 @@
 #include "v_text.h"
 #include "gi.h"
 #include "c_cvars.h"
+#include "gstrings.h"
 
 EXTERN_CVAR(String, language)
 
@@ -85,11 +86,11 @@ void FStringTable::LoadLanguage (int lumpnum)
 					}
 					if (len == 1 && sc.String[0] == '*')
 					{
-						activeMaps.Push(MAKE_ID('*', 0, 0, 0));
+						activeMaps.Push(global_table);
 					}
 					else if (len == 7 && stricmp (sc.String, "default") == 0)
 					{
-						activeMaps.Push(MAKE_ID('*', '*', 0, 0));
+						activeMaps.Push(default_table);
 					}
 					else
 					{
@@ -175,15 +176,15 @@ void FStringTable::UpdateLanguage()
 	auto checkone = [&](uint32_t lang_id)
 	{
 		auto list = allStrings.CheckKey(lang_id);
-		if (list && currentLanguageSet.Find(list) == currentLanguageSet.Size())
-			currentLanguageSet.Push(list);
+		if (list && currentLanguageSet.FindEx([&](const auto &element) { return element.first == lang_id; }) == currentLanguageSet.Size())
+			currentLanguageSet.Push(std::make_pair(lang_id, list));
 	};
 
-	checkone(MAKE_ID('*', '*', '*', 0));
-	checkone(MAKE_ID('*', 0, 0, 0));
+	checkone(dehacked_table);
+	checkone(global_table);
 	checkone(LanguageID);
 	checkone(LanguageID & MAKE_ID(0xff, 0xff, 0, 0));
-	checkone(MAKE_ID('*', '*', 0, 0));
+	checkone(default_table);
 }
 
 // Replace \ escape sequences in a string with the escaped characters.
@@ -224,7 +225,7 @@ bool FStringTable::exists(const char *name)
 	FName nm(name, true);
 	if (nm != NAME_None)
 	{
-		uint32_t defaultStrings[] = { MAKE_ID('*', '*', '*', 0), MAKE_ID('*', 0, 0, 0), MAKE_ID('*', '*', 0, 0) };
+		uint32_t defaultStrings[] = { default_table, global_table, dehacked_table };
 
 		for (auto mapid : defaultStrings)
 		{
@@ -240,7 +241,7 @@ bool FStringTable::exists(const char *name)
 }
 
 // Finds a string by name and returns its value
-const char *FStringTable::operator[] (const char *name) const
+const char *FStringTable::GetString(const char *name, uint32_t *langtable) const
 {
 	if (name == nullptr || *name == 0)
 	{
@@ -251,8 +252,33 @@ const char *FStringTable::operator[] (const char *name) const
 	{
 		for (auto map : currentLanguageSet)
 		{
-			auto item = map->CheckKey(nm);
-			if (item) return item->GetChars();
+			auto item = map.second->CheckKey(nm);
+			if (item)
+			{
+				if (langtable) *langtable = map.first;
+				return item->GetChars();
+			}
+		}
+	}
+	return nullptr;
+}
+
+// Finds a string by name in a given language
+const char *FStringTable::GetLanguageString(const char *name, uint32_t langtable) const
+{
+	if (name == nullptr || *name == 0)
+	{
+		return nullptr;
+	}
+	FName nm(name, true);
+	if (nm != NAME_None)
+	{
+		auto map = allStrings.CheckKey(langtable);
+		if (map == nullptr) return nullptr;
+		auto item = map->CheckKey(nm);
+		if (item)
+		{
+			return item->GetChars();
 		}
 	}
 	return nullptr;
@@ -281,4 +307,23 @@ const char *StringMap::MatchString (const char *string) const
 		}
 	}
 	return nullptr;
+}
+
+CCMD(printlocalized)
+{
+	if (argv.argc() > 1)
+	{
+		if (argv.argc() > 2)
+		{
+			FString lang = argv[2];
+			lang.ToLower();
+			if (lang.Len() >= 2)
+			{
+				Printf("%s\n", GStrings.GetLanguageString(argv[1], MAKE_ID(lang[0], lang[1], lang[2], 0)));
+				return;
+			}
+		}
+		Printf("%s\n", GStrings(argv[1]));
+	}
+
 }

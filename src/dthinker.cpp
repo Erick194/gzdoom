@@ -445,6 +445,7 @@ void DThinker::DestroyAllThinkers ()
 	GC::FullGC();
 	if (error)
 	{
+		ClearGlobalVMStack();
 		I_Error("DestroyAllThinkers failed");
 	}
 }
@@ -646,17 +647,20 @@ void DThinker::RunThinkers ()
 			}
 		} while (count != 0);
 
-		// Also profile the internal dynamic lights, even though they are not implemented as thinkers.
-		auto &prof = Profiles[NAME_InternalDynamicLight];
-		prof.timer.Clock();
-		for (auto light = level.lights; light;)
+		if (level.lights)
 		{
-			prof.numcalls++;
-			auto next = light->next;
-			light->Tick();
-			light = next;
+			// Also profile the internal dynamic lights, even though they are not implemented as thinkers.
+			auto &prof = Profiles[NAME_InternalDynamicLight];
+			prof.timer.Clock();
+			for (auto light = level.lights; light;)
+			{
+				prof.numcalls++;
+				auto next = light->next;
+				light->Tick();
+				light = next;
+			}
+			prof.timer.Unclock();
 		}
-		prof.timer.Unclock();
 
 
 		struct SortedProfileInfo

@@ -1,6 +1,6 @@
 /* U.S. English. (Sorry, it's not English English.) */
 
-[en default]
+[default]
 
 SECRETMESSAGE = "A secret is revealed!";
 
@@ -1294,21 +1294,24 @@ TXT_FREEZEOFF = "Freeze mode off";
 TXT_STRANGE = "You feel strange...";
 TXT_STRANGER = "You feel even stranger.";
 TXT_NOTSTRANGE = "You feel like yourself again.";
-TXT_LEADBOOTSON = "LEAD BOOTS ON";
-TXT_LEADBOOTSOFF = "LEAD BOOTS OFF";
+TXT_LEADBOOTSON = "Lead Boots On";
+TXT_LEADBOOTSOFF = "Lead Boots Off";
 TXT_LIGHTER = "You feel lighter";
 TXT_GRAVITY = "Gravity weighs you down";
 
 // Raven intermission
 
-TXT_IMKILLS = "KILLS";
-TXT_IMITEMS = "ITEMS";
-TXT_IMSECRETS = "SECRETS";
-TXT_IMTIME = "TIME";
+TXT_IMKILLS = "Kills";
+TXT_IMITEMS = "Items";
+TXT_IMSECRETS = "Secrets";
+TXT_IMTIME = "Time";
+TXT_IMSUCKS = "Sucks";
+TXT_IMSCRT = "Scrt";
+TXT_IMPAR = "Par";
 
 // For testing the extended characters' positioning.
-//TXT_IMKILLS			= "A√Ä√Å√Ç√É√Ñ√Ö√Ü√á√à√â√ä√ã√å√ç√é";
-//TXT_IMITEMS			= "O√ê√è√ë√í√ì√î√ï√ñ√ò√ô√ö√õ√ú√ù√û√ü";
+//TXT_IMKILLS			= "A¿¡¬√ƒ≈∆«»… ÀÃÕŒ";
+//TXT_IMITEMS			= "O–œ—“”‘’÷ÿŸ⁄€‹›ﬁﬂ";
 
 RAVENQUITMSG = "ARE YOU SURE YOU WANT TO QUIT?";
 
@@ -1910,12 +1913,16 @@ DSPLYMNU_MOVEBOB 				= "View bob amount while moving";
 DSPLYMNU_STILLBOB 				= "View bob amount while not moving";
 DSPLYMNU_BOBSPEED				= "Weapon bob speed";
 DSPLYMNU_GPUSWITCH				= "Notebook Switchable GPU";
+DSPLYMNU_CUSTOMINVERTMAP		= "Custom Inverse Map";
+DSPLYMNU_CUSTOMINVERTC1			= "Custom Inverse Color Dark";
+DSPLYMNU_CUSTOMINVERTC2			= "Custom Inverse Color Light";
 
 // HUD Options
 HUDMNU_TITLE					= "HUD Options";
 HUDMNU_ALTHUD					= "Alternative HUD";
 HUDMNU_MESSAGE					= "Message Options";
 HUDMNU_UISCALE					= "User interface scale";
+HUDMNU_CROSSHAIRON				= "Crosshair";
 HUDMNU_CROSSHAIR				= "Default Crosshair";
 HUDMNU_FORCECROSSHAIR			= "Force default crosshair";
 HUDMNU_GROWCROSSHAIR			= "Grow crosshair when picking up items";
@@ -1986,13 +1993,17 @@ MISCMNU_QUERYIWAD				= "Show IWAD selection dialog";
 MISCMNU_ALLCHEATS				= "Enable cheats from all games";
 MISCMNU_ENABLEAUTOSAVES			= "Enable autosaves";
 MISCMNU_AUTOSAVECOUNT			= "Number of autosaves";
-MISCMNU_SAVELOADCONFIRMATION  	= "Save/Load confirmation";
+MISCMNU_SAVELOADCONFIRMATION	= "Save/Load confirmation";
+MISCMNU_QUICKSAVEROTATION		= "Enable quicksave rotation";
+MISCMNU_QUICKSAVECOUNT			= "Number of quicksaves in rotation";
 MISCMNU_ENABLESCRIPTSCREENSHOTS	= "Enable making screenshots by scripts";
 MISCMNU_DEHLOAD					= "Load *.deh/*.bex lumps";
 MISCMNU_CACHENODES				= "Cache nodes";
 MISCMNU_CACHETIME				= "Time threshold for node caching";
 MISCMNU_CLEARNODECACHE			= "Clear node cache";
 MISCMNU_INTERSCROLL				= "Allow skipping of intermission scrollers";
+MISCMNU_QUICKEXIT				= "Allow quick exit";
+MISCMNU_NOCHEATS				= "Disable classic keyboard cheats";
 // Automap Options
 AUTOMAPMNU_TITLE				= "Automap Options";
 AUTOMAPMNU_COLORSET				= "Map color set";
@@ -2073,6 +2084,7 @@ MSGMNU_SHOWOBITUARIES		= "Show obituaries";
 MSGMNU_SHOWSECRETS			= "Show secret notifications";
 MSGMNU_MESSAGELEVEL			= "Minimum message level";
 MSGMNU_CENTERMESSAGES		= "Center messages";
+MSGMNU_SUBTITLES			= "Subtitles";
 MSGMNU_MESSAGECOLORS		= "Message Colors";
 MSGMNU_ITEMPICKUP			= "Item Pickup";
 MSGMNU_OBITUARIES			= "Obituaries";
@@ -2505,10 +2517,13 @@ OPTVAL_VTAZDOOM				= "Auto (ZDoom Preferred)";
 OPTVAL_VTAVANILLA			= "Auto (Vanilla Preferred)";
 OPTVAL_SCALENEAREST			= "Scaled (Nearest)";
 OPTVAL_SCALELINEAR			= "Scaled (Linear)";
+OPTVAL_LOWEST				= "Lowest Possible Scale";
 OPTVAL_LETTERBOX			= "Letterbox";
 OPTVAL_SMALL				= "Small";
 OPTVAL_LARGE				= "Large";
 OPTVAL_CONSOLE				= "Console";
+OPTVAL_YES_STANDARD			= "Standard";
+OPTVAL_YES_ENHANCED			= "Enhanced";
 
 // Colors
 C_BRICK					= "\cabrick";
@@ -2773,6 +2788,7 @@ GLPREFMNU_LENS					= "Lens distortion effect";
 GLPREFMNU_SSAO					= "Ambient occlusion quality";
 GLPREFMNU_SSAO_PORTALS			= "Portals with AO";
 GLPREFMNU_FXAA					= "FXAA Quality";
+GLPREFMNU_DITHER				= "Dither output";
 GLPREFMNU_PALTONEMAPORDER		= "Tonemap Palette Order";
 GLPREFMNU_PALTONEMAPPOWER		= "Tonemap Palette Exponent";
 GLPREFMNU_SWLMBANDED			= "Banded SW Lightmode";
@@ -2971,3 +2987,21 @@ TXT_SPPLAYERDEAD = "Player is dead in a single-player game";
 TXT_SAVEFAILED = "Save failed";
 TXT_SCREENSHOTERR = "Could not create screenshot.";
 TXT_BY = "By %s";
+TXT_UNDOCHANGES = "Undo Changes";
+TXT_COLOR_RED = "Red";
+TXT_COLOR_GREEN = "Green";
+TXT_COLOR_BLUE = "Blue";
+TXT_COLOR_GRAY = "Gray";
+TXT_COLOR_BROWN = "Brown";
+TXT_COLOR_YELLOW = "Yellow";
+TXT_COLOR_BEIGE = "Beige";
+TXT_COLOR_LIGHTRED = "Light Red";
+TXT_COLOR_LIGHTGREEN = "Light Green";
+TXT_COLOR_LIGHTBLUE = "Light Blue";
+TXT_COLOR_LIGHTGRAY = "Light Gray";
+TXT_COLOR_LIGHTBROWN = "Light Brown";
+TXT_COLOR_GOLD = "Gold";
+TXT_COLOR_PURPLE = "Purple";
+TXT_COLOR_DULLGREEN = "Dull Green";
+TXT_COLOR_BRIGHTGREEN = "Bright Green";
+TXT_COLOR_DARKGREEN = "Dark Green";

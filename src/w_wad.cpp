@@ -146,6 +146,10 @@ void FWadCollection::InitMultipleFiles (TArray<FString> &filenames)
 	{
 		int baselump = NumLumps;
 		AddFile (filenames[i]);
+
+		if (i == (unsigned)IwadIndex) MoveLumpsInFolder("after_iwad/");
+		FStringf path("filter/%s", Files.Last()->GetHash().GetChars());
+		MoveLumpsInFolder(path);
 	}
 
 	NumLumps = LumpInfo.Size();
@@ -365,6 +369,12 @@ int FWadCollection::CheckIfWadLoaded (const char *name)
 int FWadCollection::GetNumLumps () const
 {
 	return NumLumps;
+}
+
+DEFINE_ACTION_FUNCTION(_Wads, GetNumLumps)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_INT(Wads.GetNumLumps());
 }
 
 //==========================================================================
@@ -875,9 +885,12 @@ void FWadCollection::RenameSprites ()
 			{
 				if (LumpInfo[i].lump->dwName == MAKE_ID('M', 'N', 'T', 'R'))
 				{
-					if (LumpInfo[i].lump->Name[4] >= 'F' && LumpInfo[i].lump->Name[4] <= 'K')
+					for (size_t fi : {4, 6})
 					{
-						LumpInfo[i].lump->Name[4] += 'U' - 'F';
+						if (LumpInfo[i].lump->Name[fi] >= 'F' && LumpInfo[i].lump->Name[fi] <= 'K')
+						{
+							LumpInfo[i].lump->Name[fi] += 'U' - 'F';
+						}
 					}
 				}
 			}
@@ -915,7 +928,8 @@ void FWadCollection::RenameSprites ()
 //
 // Renames map headers and map name pictures in nerve.wad so as to load it
 // alongside Doom II and offer both episodes without causing conflicts.
-// MD5 checksum for NERVE.WAD: 967d5ae23daf45196212ae1b605da3b0
+// MD5 checksum for NERVE.WAD: 967d5ae23daf45196212ae1b605da3b0 (3,819,855)
+// MD5 checksum for Unity version of NERVE.WAD: 4214c47651b63ee2257b1c2490a518c9 (3,821,966)
 //
 //==========================================================================
 void FWadCollection::RenameNerve ()
@@ -923,20 +937,30 @@ void FWadCollection::RenameNerve ()
 	if (gameinfo.gametype != GAME_Doom)
 		return;
 
+	const int numnerveversions = 2;
+
 	bool found = false;
 	uint8_t cksum[16];
-	static const uint8_t nerve[16] = { 0x96, 0x7d, 0x5a, 0xe2, 0x3d, 0xaf, 0x45, 0x19,
-		0x62, 0x12, 0xae, 0x1b, 0x60, 0x5d, 0xa3, 0xb0 };
-	size_t nervesize = 3819855; // NERVE.WAD's file size
+	static const uint8_t nerve[numnerveversions][16] = {
+			{ 0x96, 0x7d, 0x5a, 0xe2, 0x3d, 0xaf, 0x45, 0x19,
+				0x62, 0x12, 0xae, 0x1b, 0x60, 0x5d, 0xa3, 0xb0 },
+			{ 0x42, 0x14, 0xc4, 0x76, 0x51, 0xb6, 0x3e, 0xe2,
+				0x25, 0x7b, 0x1c, 0x24, 0x90, 0xa5, 0x18, 0xc9 }
+		};
+	size_t nervesize[numnerveversions] = { 3819855, 3821966 } ; // NERVE.WAD's file size
 	int w = GetIwadNum();
 	while (++w < GetNumWads())
 	{
 		auto fr = GetFileReader(w);
+		int isizecheck = -1;
 		if (fr == NULL)
 		{
 			continue;
 		}
-		if (fr->GetLength() != (long)nervesize)
+		for (int icheck = 0; icheck < numnerveversions; icheck++)
+			if (fr->GetLength() == (long)nervesize[icheck])
+				isizecheck = icheck;
+		if (isizecheck == -1)
 		{
 			// Skip MD5 computation when there is a
 			// cheaper way to know this is not the file
@@ -946,7 +970,7 @@ void FWadCollection::RenameNerve ()
 		MD5Context md5;
 		md5.Update(*fr, (unsigned)fr->GetLength());
 		md5.Final(cksum);
-		if (memcmp(nerve, cksum, 16) == 0)
+		if (memcmp(nerve[isizecheck], cksum, 16) == 0)
 		{
 			found = true;
 			break;
@@ -1052,6 +1076,42 @@ void FWadCollection::FixMacHexen()
 	for (int i = lastLump - EXTRA_LUMPS + 1; i <= lastLump; ++i)
 	{
 		LumpInfo[i].lump->Name[0] = '\0';
+	}
+}
+
+//==========================================================================
+//
+// MoveLumpsInFolder
+//
+// Moves all content from the given subfolder of the internal
+// resources to the current end of the directory.
+// Used to allow modifying content in the base files, this is needed
+// so that Hacx and Harmony can override some content that clashes
+// with localization, and to inject modifying data into mods, in case
+// this is needed for some compatibility requirement.
+//
+//==========================================================================
+
+static FResourceLump placeholderLump;
+
+void FWadCollection::MoveLumpsInFolder(const char *path)
+{
+	auto len = strlen(path);
+	auto wadnum = LumpInfo.Last().wadnum;
+	
+	unsigned i;
+	for (i = 0; i < LumpInfo.Size(); i++)
+	{
+		auto& li = LumpInfo[i];
+		if (li.wadnum >= GetIwadNum()) break;
+		if (li.lump->FullName.Left(len).CompareNoCase(path) == 0)
+		{
+			LumpInfo.Push(li);
+			li.lump = &placeholderLump;			// Make the old entry point to something empty. We cannot delete the lump record here because it'd require adjustment of all indices in the list.
+			auto &ln = LumpInfo.Last();
+			ln.wadnum = wadnum;					// pretend this is from the WAD this is injected into.
+			ln.lump->LumpNameSetup(ln.lump->FullName.Mid(len));
+		}
 	}
 }
 
@@ -1182,6 +1242,15 @@ void FWadCollection::GetLumpName(FString &to, int lump) const
 	}
 }
 
+DEFINE_ACTION_FUNCTION(_Wads, GetLumpName)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(lump);
+	FString lumpname;
+	Wads.GetLumpName(lumpname, lump);
+	ACTION_RETURN_STRING(lumpname);
+}
+
 //==========================================================================
 //
 // FWadCollection :: GetLumpFullName
@@ -1198,6 +1267,13 @@ const char *FWadCollection::GetLumpFullName (int lump) const
 		return LumpInfo[lump].lump->FullName;
 	else
 		return LumpInfo[lump].lump->Name;
+}
+
+DEFINE_ACTION_FUNCTION(_Wads, GetLumpFullName)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(lump);
+	ACTION_RETURN_STRING(Wads.GetLumpFullName(lump));
 }
 
 //==========================================================================
@@ -1231,6 +1307,13 @@ int FWadCollection::GetLumpNamespace (int lump) const
 		return ns_global;
 	else
 		return LumpInfo[lump].lump->Namespace;
+}
+
+DEFINE_ACTION_FUNCTION(_Wads, GetLumpNamespace)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(lump);
+	ACTION_RETURN_INT(Wads.GetLumpNamespace(lump));
 }
 
 //==========================================================================

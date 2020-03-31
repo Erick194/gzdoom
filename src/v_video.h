@@ -202,6 +202,8 @@ enum
 	DTA_LegacyRenderStyle,	// takes an old-style STYLE_* constant instead of an FRenderStyle
 	DTA_Spacing,			// Strings only: Additional spacing between characters
 	DTA_Monospace,			// Fonts only: Use a fixed distance between characters.
+
+	DTA_FullscreenEx,
 };
 
 enum EMonospacing : int
@@ -265,6 +267,8 @@ struct DrawParms
 	int maxstrlen;
 	bool fortext;
 	bool virtBottom;
+	bool burn;
+	uint8_t fsscalemode;
 	double srcx, srcy;
 	double srcwidth, srcheight;
 };
@@ -604,7 +608,6 @@ int AspectBaseHeight(float aspect);
 double AspectPspriteOffset(float aspect);
 int AspectMultiplier(float aspect);
 bool AspectTallerThanWide(float aspect);
-void ScaleWithAspect(int &w, int &h, int Width, int Height);
 
 int GetUIScale(int altval);
 
@@ -639,9 +642,13 @@ public:
 		savedyfac = CleanYfac;
 		savedwidth = CleanWidth;
 		savedheight = CleanHeight;
-		V_CalcCleanFacs(320, 200, screen->GetWidth(), screen->GetHeight(), &CleanXfac, &CleanYfac);
-		CleanWidth = screen->GetWidth() / CleanXfac;
-		CleanHeight = screen->GetHeight() / CleanYfac;
+
+		if (screen)
+		{
+			V_CalcCleanFacs(320, 200, screen->GetWidth(), screen->GetHeight(), &CleanXfac, &CleanYfac);
+			CleanWidth = screen->GetWidth() / CleanXfac;
+			CleanHeight = screen->GetHeight() / CleanYfac;
+		}
 	}
 
 	~ScaleOverrider()

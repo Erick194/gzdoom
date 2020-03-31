@@ -43,7 +43,7 @@
 #include "a_keys.h"
 #include "p_enemy.h"
 #include "gstrings.h"
-#include "sound/i_music.h"
+#include "i_music.h"
 #include "p_setup.h"
 #include "d_net.h"
 #include "d_event.h"
@@ -592,8 +592,6 @@ static void ParseReplies (const char *name, int pos, FStrifeDialogueReply **repl
 		{
 			FStringf label("$TXT_RPLY%d_%s_d%d_%s", j, name, pos, TokenFromString(rsp->Reply).GetChars());
 			reply->Reply = GStrings.exists(label.GetChars() + 1)? label : FString(rsp->Reply);
-
-			reply->Reply = label;
 		}
 		else
 		{
@@ -864,7 +862,7 @@ void P_StartConversation (AActor *npc, AActor *pc, bool facetalker, bool saveang
 
 	if (pc->player == &players[consoleplayer])
 	{
-		S_Sound (CHAN_VOICE | CHAN_UI, gameinfo.chatSound, 1, ATTN_NONE);
+		S_Sound (CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1, ATTN_NONE);
 	}
 
 	npc->reactiontime = 2;
@@ -915,7 +913,7 @@ void P_StartConversation (AActor *npc, AActor *pc, bool facetalker, bool saveang
 		if (CurNode->SpeakerVoice != 0)
 		{
 			I_SetMusicVolume (dlg_musicvolume);
-			S_Sound (npc, CHAN_VOICE|CHAN_NOPAUSE, CurNode->SpeakerVoice, 1, ATTN_NORM);
+			S_Sound (npc, CHAN_VOICE, CHANF_NOPAUSE, CurNode->SpeakerVoice, 1, ATTN_NORM);
 		}
 		M_StartControlPanel(false, true);
 
@@ -1122,6 +1120,7 @@ static void HandleReply(player_t *player, bool isconsole, int nodenum, int reply
 	{
 		int rootnode = npc->ConversationRoot;
 		const unsigned next = (unsigned)(rootnode + reply->NextNode - 1);
+		FString nextname = reply->NextNodeName;
 
 		if (next < StrifeDialogues.Size())
 		{
@@ -1142,7 +1141,10 @@ static void HandleReply(player_t *player, bool isconsole, int nodenum, int reply
 		}
 		else
 		{
-			Printf ("Next node %u is invalid, no such dialog page\n", next);
+			if (nextname.IsEmpty())
+				Printf ("Next node %u is invalid, no such dialog page\n", next);
+			else
+				Printf ("Next node %u ('%s') is invalid, no such dialog page\n", next, nextname.GetChars());
 		}
 	}
 

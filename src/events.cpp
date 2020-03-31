@@ -470,6 +470,25 @@ bool E_Responder(const event_t* ev)
 {
 	bool uiProcessorsFound = false;
 
+	// FIRST, check if there are UI processors
+	// if there are, block mouse input
+	for (DStaticEventHandler* handler = E_LastEventHandler; handler; handler = handler->prev)
+	{
+		if (handler->IsUiProcessor)
+		{
+			uiProcessorsFound = true;
+			break;
+		}
+	}
+
+	// if this was an input mouse event (occasionally happens) we need to block it without showing it to the modder.
+	bool isUiMouseEvent = (ev->type == EV_GUI_Event && ev->subtype >= EV_GUI_FirstMouseEvent && ev->subtype <= EV_GUI_LastMouseEvent);
+	bool isInputMouseEvent = (ev->type == EV_Mouse) || // input mouse movement
+		((ev->type == EV_KeyDown || ev->type == EV_KeyUp) && ev->data1 >= KEY_MOUSE1 && ev->data1 <= KEY_MOUSE8); // or input mouse click
+
+	if (isInputMouseEvent && uiProcessorsFound)
+		return true; // block event from propagating
+
 	if (ev->type == EV_GUI_Event)
 	{
 		// iterate handlers back to front by order, and give them this event.
@@ -477,7 +496,8 @@ bool E_Responder(const event_t* ev)
 		{
 			if (handler->IsUiProcessor)
 			{
-				uiProcessorsFound = true;
+				if (isUiMouseEvent && !handler->RequireMouse)
+					continue; // don't provide mouse event if not requested
 				if (handler->UiProcess(ev))
 					return true; // event was processed
 			}
@@ -488,14 +508,15 @@ bool E_Responder(const event_t* ev)
 		// not sure if we want to handle device changes, but whatevs.
 		for (DStaticEventHandler* handler = E_LastEventHandler; handler; handler = handler->prev)
 		{
+			// do not process input events for UI
 			if (handler->IsUiProcessor)
-				uiProcessorsFound = true;
+				continue;
 			if (handler->InputProcess(ev))
 				return true; // event was processed
 		}
 	}
 
-	return (uiProcessorsFound && (ev->type == EV_Mouse)); // mouse events are eaten by the event system if there are any uiprocessors.
+	return false;
 }
 
 void E_Console(int player, FString name, int arg1, int arg2, int arg3, bool manual)
@@ -508,6 +529,12 @@ void E_RenderOverlay(EHudState state)
 {
 	for (DStaticEventHandler* handler = E_FirstEventHandler; handler; handler = handler->next)
 		handler->RenderOverlay(state);
+}
+
+void E_RenderUnderlay(EHudState state)
+{
+	for (DStaticEventHandler* handler = E_FirstEventHandler; handler; handler = handler->next)
+		handler->RenderUnderlay(state);
 }
 
 bool E_CheckUiProcessors()
@@ -972,6 +999,19 @@ void DStaticEventHandler::RenderOverlay(EHudState state)
 	}
 }
 
+void DStaticEventHandler::RenderUnderlay(EHudState state)
+{
+	IFVIRTUAL(DStaticEventHandler, RenderUnderlay)
+	{
+		// don't create excessive DObjects if not going to be processed anyway
+		if (isEmpty(func)) return;
+		FRenderEvent e = E_SetupRenderEvent();
+		e.HudState = int(state);
+		VMValue params[2] = { (DStaticEventHandler*)this, &e };
+		VMCall(func, params, 2, nullptr, 0);
+	}
+}
+
 void DStaticEventHandler::PlayerEntered(int num, bool fromhub)
 {
 	IFVIRTUAL(DStaticEventHandler, PlayerEntered)
@@ -1263,7 +1303,7 @@ CCMD(netevent)
 {
 	if (gamestate != GS_LEVEL/* && gamestate != GS_TITLELEVEL*/) // not sure if this should work in title level, but probably not, because this is for actual playing
 	{
-		Printf("netevent cannot be used outside of a map.\n");
+		DPrintf(DMSG_SPAMMY, "netevent cannot be used outside of a map.\n");
 		return;
 	}
 

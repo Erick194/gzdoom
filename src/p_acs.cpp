@@ -69,12 +69,12 @@
 #include "p_effect.h"
 #include "r_utility.h"
 #include "a_morph.h"
-#include "i_music.h"
 #include "thingdef.h"
 #include "g_levellocals.h"
 #include "actorinlines.h"
 #include "types.h"
 #include "scriptutil.h"
+#include "s_music.h"
 
 	// P-codes for ACS scripts
 	enum
@@ -3870,8 +3870,7 @@ int DLevelScript::DoSpawn (int type, const DVector3 &pos, int tid, DAngle angle,
 			if (force || P_TestMobjLocation (actor))
 			{
 				actor->Angles.Yaw = angle;
-				actor->tid = tid;
-				actor->AddToHash ();
+				actor->SetTID(tid);
 				if (actor->flags & MF_SPECIAL)
 					actor->flags |= MF_DROPPED;  // Don't respawn
 				actor->flags2 = oldFlags2;
@@ -4509,11 +4508,11 @@ int DLevelScript::GetActorProperty (int tid, int property)
 								return 0;
 							}
 
-	case APROP_SeeSound:	return GlobalACSStrings.AddString(actor->SeeSound);
-	case APROP_AttackSound:	return GlobalACSStrings.AddString(actor->AttackSound);
-	case APROP_PainSound:	return GlobalACSStrings.AddString(actor->PainSound);
-	case APROP_DeathSound:	return GlobalACSStrings.AddString(actor->DeathSound);
-	case APROP_ActiveSound:	return GlobalACSStrings.AddString(actor->ActiveSound);
+	case APROP_SeeSound:	return GlobalACSStrings.AddString(S_GetSoundName(actor->SeeSound));
+	case APROP_AttackSound:	return GlobalACSStrings.AddString(S_GetSoundName(actor->AttackSound));
+	case APROP_PainSound:	return GlobalACSStrings.AddString(S_GetSoundName(actor->PainSound));
+	case APROP_DeathSound:	return GlobalACSStrings.AddString(S_GetSoundName(actor->DeathSound));
+	case APROP_ActiveSound:	return GlobalACSStrings.AddString(S_GetSoundName(actor->ActiveSound));
 	case APROP_Species:		return GlobalACSStrings.AddString(actor->GetSpecies());
 	case APROP_NameTag:		return GlobalACSStrings.AddString(actor->GetTag());
 	case APROP_StencilColor:return actor->fillcolor;
@@ -4586,11 +4585,11 @@ int DLevelScript::CheckActorProperty (int tid, int property, int value)
 
 		// Strings are covered by GetActorProperty, but they're fairly
 		// heavy-duty, so make the check here.
-		case APROP_SeeSound:	string = actor->SeeSound; break;
-		case APROP_AttackSound:	string = actor->AttackSound; break;
-		case APROP_PainSound:	string = actor->PainSound; break;
-		case APROP_DeathSound:	string = actor->DeathSound; break;
-		case APROP_ActiveSound:	string = actor->ActiveSound; break; 
+		case APROP_SeeSound:	string = S_GetSoundName(actor->SeeSound); break;
+		case APROP_AttackSound:	string = S_GetSoundName(actor->AttackSound); break;
+		case APROP_PainSound:	string = S_GetSoundName(actor->PainSound); break;
+		case APROP_DeathSound:	string = S_GetSoundName(actor->DeathSound); break;
+		case APROP_ActiveSound:	string = S_GetSoundName(actor->ActiveSound); break; 
 		case APROP_Species:		string = actor->GetSpecies(); break;
 		case APROP_NameTag:		string = actor->GetTag(); break;
 		case APROP_DamageType:	string = actor->DamageType; break;
@@ -5384,7 +5383,7 @@ static int ScriptCall(AActor *activator, unsigned argc, int32_t *args)
 				}
 				else if (rettype == TypeSound)
 				{
-					retval = GlobalACSStrings.AddString(FSoundID(retval));
+					retval = GlobalACSStrings.AddString(S_GetSoundName(FSoundID(retval)));
 				}
 			}
 			else if (rettype == TypeFloat64)
@@ -5905,7 +5904,7 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args)
 		case ACSF_GetCVarString:
 			if (argCount == 1)
 			{
-				return DoGetCVar(GetCVar(activator, FBehavior::StaticLookupString(args[0])), true);
+				return DoGetCVar(GetCVar(activator && activator->player ? int(activator->player - players) : -1, FBehavior::StaticLookupString(args[0])), true);
 			}
 			break;
 
@@ -5972,8 +5971,7 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args)
 					AActor *puff = P_LineAttack(activator, angle, range, pitch, damage, damagetype, pufftype, fhflags);
 					if (puff != NULL && pufftid != 0)
 					{
-						puff->tid = pufftid;
-						puff->AddToHash();
+						puff->SetTID(pufftid);
 					}
 				}
 				else
@@ -5986,8 +5984,7 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args)
 						AActor *puff = P_LineAttack(source, angle, range, pitch, damage, damagetype, pufftype, fhflags);
 						if (puff != NULL && pufftid != 0)
 						{
-							puff->tid = pufftid;
-							puff->AddToHash();
+							puff->SetTID(pufftid);
 						}
 					}
 				}
@@ -5998,7 +5995,7 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args)
 		case ACSF_PlayActorSound:
 			// PlaySound(tid, "SoundName", channel, volume, looping, attenuation, local)
 			{
-				FSoundID sid;
+				FSoundID sid = 0;
 
 				if (funcIndex == ACSF_PlaySound)
 				{
@@ -6032,14 +6029,10 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 						}
 						if (sid != 0)
 						{
-							if (!looping)
-							{
-								S_PlaySound(spot, chan, sid, vol, atten, !!local);
-							}
-							else if (!S_IsActorPlayingSomething(spot, chan & 7, sid))
-							{
-								S_PlaySound(spot, chan | CHAN_LOOP, sid, vol, atten, !!local);
-							}
+							// What a mess. I think it's a given that this was used with sound flags so it will forever be restricted to the original 8 channels.
+							if (local) chan |= CHANF_LOCAL;
+							if (looping) chan |= CHANF_LOOP | CHANF_NOSTOP;
+							S_PlaySound(spot, chan&7, EChanFlags::FromInt(chan&~7), sid, vol, atten);
 						}
 					}
 				}
@@ -6075,7 +6068,7 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 
 				if (args[0] == 0)
 				{
-					S_ChangeSoundVolume(activator, chan, volume);
+					S_ChangeActorSoundVolume(activator, chan, volume);
 				}
 				else
 				{
@@ -6084,7 +6077,7 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 
 					while ((spot = it.Next()) != NULL)
 					{
-						S_ChangeSoundVolume(spot, chan, volume);
+						S_ChangeActorSoundVolume(spot, chan, volume);
 					}
 				}
 			}
@@ -6407,9 +6400,7 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 
 				if ((pickedActor->tid == 0) || (flags & PICKAF_FORCETID))
 				{
-					pickedActor->RemoveFromHash();
-					pickedActor->tid = args[4];
-					pickedActor->AddToHash();
+					pickedActor->SetTID(args[4]);
 				}
 				if (flags & PICKAF_RETURNTID)
 				{
@@ -6814,7 +6805,7 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 			int lineno = it.Next();
 			if (lineno < 0) return 0;
 			DVector2 delta = level.lines[lineno].Delta();
-			double result = delta[funcIndex - ACSF_GetLineX] * ACSToDouble(args[1]);
+			double result = level.lines[lineno].v1->fPos()[funcIndex - ACSF_GetLineX] + delta[funcIndex - ACSF_GetLineX] * ACSToDouble(args[1]);
 			if (args[2])
 			{
 				DVector2 normal = DVector2(delta.Y, -delta.X).Unit();
@@ -8426,9 +8417,21 @@ scriptwait:
 			break;
 
 		case PCD_SCRIPTWAITDIRECT:
-			statedata = uallong(pc[0]);
-			pc++;
-			goto scriptwait;
+			if (!(i_compatflags2 & COMPATF2_SCRIPTWAIT))
+			{
+				statedata = uallong(pc[0]);
+				pc++;
+				goto scriptwait;
+			}
+			else
+			{
+				// Old implementation for compatibility with Daedalus MAP19
+				state = SCRIPT_ScriptWait;
+				statedata = uallong(pc[0]);
+				pc++;
+				PutLast();
+				break;
+			}
 
 		case PCD_SCRIPTWAITNAMED:
 			statedata = -FName(FBehavior::StaticLookupString(STACK(1)));
@@ -8721,12 +8724,9 @@ scriptwait:
 					screen = screen->target;
 				}
 				if (pcd == PCD_ENDPRINTBOLD || screen == NULL ||
-					screen->CheckLocalView (consoleplayer))
+					screen->CheckLocalView())
 				{
-					if (pcd == PCD_ENDPRINTBOLD && (gameinfo.correctprintbold || (level.flags2 & LEVEL2_HEXENHACK)))
-						C_MidPrintBold(activefont, work);
-					else
-						C_MidPrint (activefont, work);
+					C_MidPrint(activefont, work, pcd == PCD_ENDPRINTBOLD && (gameinfo.correctprintbold || (level.flags2 & LEVEL2_HEXENHACK)));
 				}
 				STRINGBUILDER_FINISH(work);
 			}
@@ -8939,7 +8939,7 @@ scriptwait:
 				{
 					S_Sound (
 						activationline->frontsector,
-						CHAN_AUTO,	// Not CHAN_AREA, because that'd probably break existing scripts.
+						CHAN_AUTO, 0,	// Not CHAN_AREA, because that'd probably break existing scripts.
 						lookup,
 						(float)(STACK(1)) / 127.f,
 						ATTN_NORM);
@@ -8947,7 +8947,7 @@ scriptwait:
 				else
 				{
 					S_Sound (
-						CHAN_AUTO,
+						CHAN_AUTO, 0,
 						lookup,
 						(float)(STACK(1)) / 127.f,
 						ATTN_NORM);
@@ -8960,7 +8960,7 @@ scriptwait:
 			lookup = FBehavior::StaticLookupString (STACK(2));
 			if (lookup != NULL)
 			{
-				S_Sound (CHAN_AUTO,
+				S_Sound (CHAN_AUTO, 0,
 						 lookup,
 						 (float)(STACK(1)) / 127.f, ATTN_NONE);
 			}
@@ -8969,9 +8969,9 @@ scriptwait:
 
 		case PCD_LOCALAMBIENTSOUND:
 			lookup = FBehavior::StaticLookupString (STACK(2));
-			if (lookup != NULL && activator && activator->CheckLocalView (consoleplayer))
+			if (lookup != NULL && activator && activator->CheckLocalView())
 			{
-				S_Sound (CHAN_AUTO,
+				S_Sound (CHAN_AUTO, 0,
 						 lookup,
 						 (float)(STACK(1)) / 127.f, ATTN_NONE);
 			}
@@ -8984,13 +8984,13 @@ scriptwait:
 			{
 				if (activator != NULL)
 				{
-					S_Sound (activator, CHAN_AUTO,
+					S_Sound (activator, CHAN_AUTO, 0,
 							 lookup,
 							 (float)(STACK(1)) / 127.f, ATTN_NORM);
 				}
 				else
 				{
-					S_Sound (CHAN_AUTO,
+					S_Sound (CHAN_AUTO, 0,
 							 lookup,
 							 (float)(STACK(1)) / 127.f, ATTN_NONE);
 				}
@@ -9158,7 +9158,7 @@ scriptwait:
 
 				while ( (spot = iterator.Next ()) )
 				{
-					S_Sound (spot, CHAN_AUTO,
+					S_Sound (spot, CHAN_AUTO, 0,
 							 lookup,
 							 (float)(STACK(1))/127.f, ATTN_NORM);
 				}
@@ -9224,7 +9224,7 @@ scriptwait:
 			break;
 
 		case PCD_CLEARINVENTORY:
-			ScriptUtil::Exec(NAME_ClearInventory, ScriptUtil::Pointer, activator, ScriptUtil::End);
+			ScriptUtil::Exec(NAME_ClearInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::End);
 			break;
 
 		case PCD_CLEARACTORINVENTORY:
@@ -9247,7 +9247,7 @@ scriptwait:
 		case PCD_GIVEINVENTORY:
 		{
 			int typeindex = FName(FBehavior::StaticLookupString(STACK(2))).GetIndex();
-			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, activator, ScriptUtil::Int, typeindex, ScriptUtil::Int, STACK(1), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, typeindex, ScriptUtil::Int, STACK(1), ScriptUtil::End);
 			sp -= 2;
 			break;
 		}
@@ -9276,7 +9276,7 @@ scriptwait:
 		case PCD_GIVEINVENTORYDIRECT:
 		{
 			int typeindex = FName(FBehavior::StaticLookupString(TAGSTR(uallong(pc[0])))).GetIndex();
-			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, activator, ScriptUtil::Int, typeindex, ScriptUtil::Int, uallong(pc[1]), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, typeindex, ScriptUtil::Int, uallong(pc[1]), ScriptUtil::End);
 			pc += 2;
 			break;
 		}
@@ -9284,7 +9284,7 @@ scriptwait:
 		case PCD_TAKEINVENTORY:
 		{
 			int typeindex = FName(FBehavior::StaticLookupString(STACK(2))).GetIndex();
-			ScriptUtil::Exec(NAME_TakeInventory, ScriptUtil::Pointer, activator, ScriptUtil::Int, typeindex, ScriptUtil::Int, STACK(1), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_TakeInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, typeindex, ScriptUtil::Int, STACK(1), ScriptUtil::End);
 			sp -= 2;
 			break;
 		}
@@ -9313,7 +9313,7 @@ scriptwait:
 		case PCD_TAKEINVENTORYDIRECT:
 		{
 			int typeindex = FName(FBehavior::StaticLookupString(TAGSTR(uallong(pc[0])))).GetIndex();
-			ScriptUtil::Exec(NAME_TakeInventory, ScriptUtil::Pointer, activator, ScriptUtil::Int, typeindex, ScriptUtil::Int, uallong(pc[1]), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_TakeInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, typeindex, ScriptUtil::Int, uallong(pc[1]), ScriptUtil::End);
 			pc += 2;
 			break;
 		}
@@ -9743,16 +9743,16 @@ scriptwait:
             break;
 
 		case PCD_SETWEAPON:
-			STACK(1) = ScriptUtil::Exec(NAME_SetWeapon, ScriptUtil::Pointer, activator, ScriptUtil::ACSClass, STACK(1), ScriptUtil::End);
+			STACK(1) = ScriptUtil::Exec(NAME_SetWeapon, ScriptUtil::Pointer, activator.Get(), ScriptUtil::ACSClass, STACK(1), ScriptUtil::End);
 			break;
 
 		case PCD_SETMARINEWEAPON:
-			ScriptUtil::Exec(NAME_SetMarineWeapon, ScriptUtil::Pointer, activator, ScriptUtil::Int, STACK(2), ScriptUtil::Int, STACK(1), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_SetMarineWeapon, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, STACK(2), ScriptUtil::Int, STACK(1), ScriptUtil::End);
 			sp -= 2;
 			break;
 
 		case PCD_SETMARINESPRITE:
-			ScriptUtil::Exec(NAME_SetMarineSprite, ScriptUtil::Pointer, activator, ScriptUtil::Int, STACK(2), ScriptUtil::ACSClass, STACK(1), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_SetMarineSprite, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, STACK(2), ScriptUtil::ACSClass, STACK(1), ScriptUtil::End);
 			sp -= 2;
 			break;
 
@@ -9859,7 +9859,7 @@ scriptwait:
 			break;
 
 		case PCD_GETCVAR:
-			STACK(1) = DoGetCVar(GetCVar(activator, FBehavior::StaticLookupString(STACK(1))), false);
+			STACK(1) = DoGetCVar(GetCVar(activator && activator->player? int(activator->player - players) : -1, FBehavior::StaticLookupString(STACK(1))), false);
 			break;
 
 		case PCD_SETHUDSIZE:
@@ -10096,7 +10096,7 @@ scriptwait:
 		}
 
 		case PCD_SETMUGSHOTSTATE:
-			if (!multiplayer || (activator != nullptr && activator->CheckLocalView(consoleplayer)))
+			if (!multiplayer || (activator != nullptr && activator->CheckLocalView()))
 			{
 				StatusBar->SetMugShotState(FBehavior::StaticLookupString(STACK(1)));
 			}

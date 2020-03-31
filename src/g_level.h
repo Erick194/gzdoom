@@ -201,7 +201,7 @@ enum ELevelFlags : unsigned int
 	LEVEL2_LAXACTIVATIONMAPINFO	= 0x00000008,	// LEVEL_LAXMONSTERACTIVATION is not a default.
 
 	LEVEL2_MISSILESACTIVATEIMPACT=0x00000010,	// Missiles are the activators of SPAC_IMPACT events, not their shooters
-	//							= 0x00000020,	// unused
+	LEVEL2_NEEDCLUSTERTEXT		= 0x00000020,	// A map with this flag needs to retain its cluster intermission texts when being redefined in UMAPINFO
 
 	LEVEL2_KEEPFULLINVENTORY	= 0x00000040,	// doesn't reduce the amount of inventory items to 1
 
@@ -225,7 +225,7 @@ enum ELevelFlags : unsigned int
 	LEVEL2_FORCETEAMPLAYOFF		= 0x00080000,
 
 	LEVEL2_CONV_SINGLE_UNFREEZE	= 0x00100000,
-	//			= 0x00200000,	// unused, was LEVEL2_RAILINGHACK
+	LEVEL2_NOCLUSTERTEXT		= 0x00200000,	// ignore intermission texts fro clusters. This gets set when UMAPINFO is used to redefine its properties.
 	LEVEL2_DUMMYSWITCHES		= 0x00400000,
 	LEVEL2_HEXENHACK			= 0x00800000,	// Level was defined in a Hexen style MAPINFO
 
@@ -248,6 +248,7 @@ enum ELevelFlags : unsigned int
 	LEVEL3_EXITNORMALUSED		= 0x00000020,
 	LEVEL3_EXITSECRETUSED		= 0x00000040,
 	LEVEL3_FORCEWORLDPANNING	= 0x00000080,	// Forces the world panning flag for all textures, even those without it explicitly set.
+	LEVEL3_HIDEAUTHORNAME		= 0x00000100,
 };
 
 
@@ -296,6 +297,19 @@ struct FExitText
 	}
 };
 
+enum class ELightMode : int8_t
+{
+	NotSet = -1,
+	LinearStandard = 0,
+	DoomBright = 1,
+	Doom = 2,
+	DoomDark = 3,
+	DoomLegacy = 4,
+	ZDoomSoftware = 8,
+	DoomSoftware = 16
+};
+
+
 struct level_info_t
 {
 	int			levelnum;
@@ -322,6 +336,7 @@ struct level_info_t
 
 	FString		Music;
 	FString		LevelName;
+	FString		AuthorName;
 	int8_t		WallVertLight, WallHorizLight;
 	int			musicorder;
 	FCompressedBuffer	Snapshot;
@@ -376,7 +391,7 @@ struct level_info_t
 	
 	TArray<FString> EventHandlers;
 
-	int8_t		lightmode;
+	ELightMode	lightmode;
 	int8_t		brightfog;
 	int8_t		lightadditivesurfaces;
 	int8_t		notexturefill;
@@ -490,6 +505,7 @@ level_info_t *CheckLevelRedirect (level_info_t *info);
 
 FString CalcMapName (int episode, int level);
 
+void G_ClearMapinfo();
 void G_ParseMapInfo (FString basemapinfo);
 
 void G_ClearSnapshots (void);
@@ -576,7 +592,7 @@ struct FSkillInfo
 	int Infighting;
 	bool PlayerRespawn;
 
-	FSkillInfo() {}
+	FSkillInfo() = default;
 	FSkillInfo(const FSkillInfo &other)
 	{
 		operator=(other);

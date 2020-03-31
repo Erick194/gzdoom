@@ -41,16 +41,16 @@ const char *GetVersionString();
 
 /** Lots of different version numbers **/
 
-#define VERSIONSTR "g3.8.0_legacy"
+#define VERSIONSTR "g3.8.3_legacy"
 
 // The version as seen in the Windows resource
-#define RC_FILEVERSION 3,8,0,0
-#define RC_PRODUCTVERSION 3,8,0,0
+#define RC_FILEVERSION 3,8,3,0
+#define RC_PRODUCTVERSION 3,8,3,0
 #define RC_PRODUCTVERSION2 VERSIONSTR
 // These are for content versioning.
 #define VER_MAJOR 4
-#define VER_MINOR 1
-#define VER_REVISION 0
+#define VER_MINOR 3
+#define VER_REVISION 3
 
 // Version identifier for network games.
 // Bump it every time you do a release unless you're certain you
@@ -79,16 +79,16 @@ const char *GetVersionString();
 #define SAVEGAME_EXT "zds"
 
 // MINSAVEVER is the minimum level snapshot version that can be loaded.
-#define MINSAVEVER	4556
+#define MINSAVEVER 4556
 
 // Use 4500 as the base git save version, since it's higher than the
 // SVN revision ever got.
-#define SAVEVER 4556
+#define SAVEVER 4558
 
 // This is so that derivates can use the same savegame versions without worrying about engine compatibility
 #define GAMESIG "GZDOOM"
 #define BASEWAD "gzdoom.pk3"
-#define OPTIONALWAD "zd_extra.pk3"
+#define OPTIONALWAD "game_support.pk3"
 
 // More stuff that needs to be different for derivatives.
 #define GAMENAME "GZDoom"

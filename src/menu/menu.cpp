@@ -64,7 +64,6 @@ CVAR (Bool, show_obituaries, true, CVAR_ARCHIVE)
 CVAR (Int, m_showinputgrid, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, m_blockcontrollers, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
-
 CVAR (Float, snd_menuvolume, 0.6f, CVAR_ARCHIVE)
 CVAR(Int, m_use_mouse, 2, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Int, m_show_backbutton, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
@@ -370,7 +369,7 @@ void M_StartControlPanel (bool makeSound, bool scaleoverride)
 
 	if (makeSound)
 	{
-		S_Sound (CHAN_VOICE | CHAN_UI, "menu/activate", snd_menuvolume, ATTN_NONE);
+		S_Sound (CHAN_VOICE, CHANF_UI, "menu/activate", snd_menuvolume, ATTN_NONE);
 	}
 	BackbuttonTime = 0;
 	BackbuttonAlpha = 0;
@@ -485,6 +484,10 @@ void M_SetMenu(FName menu, int param)
 		void ActivateEndGameMenu();
 		ActivateEndGameMenu();
 		return;
+
+	case NAME_Playermenu:
+		menu = NAME_NewPlayerMenu;	// redirect the old player menu to the new one.
+		break;
 	}
 
 	// End of special checks
@@ -851,7 +854,7 @@ void M_Drawer (void)
 
 	if (CurrentMenu != nullptr && menuactive != MENU_Off) 
 	{
-		screen->BlurScene(gameinfo.bluramount);
+		if (!CurrentMenu->DontBlur) screen->BlurScene(gameinfo.bluramount);
 		if (!CurrentMenu->DontDim)
 		{
 			M_Dim();
@@ -1087,13 +1090,13 @@ EXTERN_CVAR (Int, screenblocks)
 CCMD (sizedown)
 {
 	screenblocks = screenblocks - 1;
-	S_Sound (CHAN_VOICE | CHAN_UI, "menu/change", snd_menuvolume, ATTN_NONE);
+	S_Sound (CHAN_VOICE, CHANF_UI, "menu/change", snd_menuvolume, ATTN_NONE);
 }
 
 CCMD (sizeup)
 {
 	screenblocks = screenblocks + 1;
-	S_Sound (CHAN_VOICE | CHAN_UI, "menu/change", snd_menuvolume, ATTN_NONE);
+	S_Sound (CHAN_VOICE, CHANF_UI, "menu/change", snd_menuvolume, ATTN_NONE);
 }
 
 CCMD(menuconsole)
@@ -1140,6 +1143,7 @@ DEFINE_FIELD(DMenu, mParentMenu)
 DEFINE_FIELD(DMenu, mMouseCapture);
 DEFINE_FIELD(DMenu, mBackbuttonSelected);
 DEFINE_FIELD(DMenu, DontDim);
+DEFINE_FIELD(DMenu, DontBlur);
 
 DEFINE_FIELD(DMenuDescriptor, mMenuName)
 DEFINE_FIELD(DMenuDescriptor, mNetgameMessage)

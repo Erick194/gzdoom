@@ -82,6 +82,7 @@ EXTERN_CVAR (Bool, am_showtotaltime)
 EXTERN_CVAR (Bool, noisedebug)
 EXTERN_CVAR (Int, con_scaletext)
 EXTERN_CVAR(Bool, vid_fps)
+EXTERN_CVAR(Bool, inter_subtitles)
 CVAR(Int, hud_scale, 0, CVAR_ARCHIVE);
 
 
@@ -121,10 +122,11 @@ CUSTOM_CVAR(Bool, hud_aspectscale, false, CVAR_ARCHIVE)
 	}
 }
 
+CVAR (Bool, crosshairon, true, CVAR_ARCHIVE);
 CVAR (Int, crosshair, 0, CVAR_ARCHIVE)
 CVAR (Bool, crosshairforce, false, CVAR_ARCHIVE)
 CVAR (Color, crosshaircolor, 0xff0000, CVAR_ARCHIVE);
-CVAR (Bool, crosshairhealth, true, CVAR_ARCHIVE);
+CVAR (Int, crosshairhealth, 1, CVAR_ARCHIVE);
 CVAR (Float, crosshairscale, 1.0, CVAR_ARCHIVE);
 CVAR (Bool, crosshairgrow, false, CVAR_ARCHIVE);
 CUSTOM_CVAR(Int, am_showmaplabel, 2, CVAR_ARCHIVE)
@@ -349,7 +351,6 @@ void ST_CreateStatusBar(bool bTitleLevel)
 // Constructor
 //
 //---------------------------------------------------------------------------
-
 DBaseStatusBar::DBaseStatusBar ()
 {
 	CompleteBorder = false;
@@ -361,21 +362,9 @@ DBaseStatusBar::DBaseStatusBar ()
 	CPlayer = NULL;
 	ShowLog = false;
 	defaultScale = { (double)CleanXfac, (double)CleanYfac };
+	SetSize(0);
 
-	// Create the AltHud object. Todo: Make class type configurable.
-	FName classname = "AltHud";
-	auto cls = PClass::FindClass(classname);
-	if (cls)
-	{
-		AltHud = cls->CreateNew();
-
-		VMFunction * func = PClass::FindFunction(classname, "Init"); 
-		if (func != nullptr)
-		{
-			VMValue params[] = { AltHud };
-			VMCall(func, params, countof(params), nullptr, 0);
-		}
-	}
+	CreateAltHUD();
 }
 
 static void ValidateResolution(int &hres, int &vres)
@@ -699,7 +688,9 @@ void DBaseStatusBar::CallTick()
 void DBaseStatusBar::AttachMessage (DHUDMessageBase *msg, uint32_t id, int layer)
 {
 	DHUDMessageBase *old = NULL;
-	DHUDMessageBase **prev;
+	DObject* pointing;
+	DHUDMessageBase **prevp;
+	DHUDMessageBase* prev;
 
 	old = (id == 0 || id == 0xFFFFFFFF) ? NULL : DetachMessage (id);
 	if (old != NULL)
@@ -713,20 +704,25 @@ void DBaseStatusBar::AttachMessage (DHUDMessageBase *msg, uint32_t id, int layer
 		layer = HUDMSGLayer_Default;
 	}
 
-	prev = &Messages[layer];
+	pointing = this;
+	prevp = &Messages[layer];
+	prev = *prevp;
 
 	// The ID serves as a priority, where lower numbers appear in front of
 	// higher numbers. (i.e. The list is sorted in descending order, since
 	// it gets drawn back to front.)
-	while (*prev != NULL && (*prev)->SBarID > id)
+	while (prev != NULL && prev->SBarID > id)
 	{
-		prev = &(*prev)->Next;
+		pointing = prev;
+		prevp = &prev->Next;
+		prev = *prevp;
 	}
 
-	msg->Next = *prev;
+	msg->Next = prev;
 	msg->SBarID = id;
-	*prev = msg;
-	GC::WriteBarrier(msg);
+	*prevp = msg;
+	GC::WriteBarrier(msg, prev);
+	GC::WriteBarrier(pointing, msg);
 }
 
 //---------------------------------------------------------------------------
@@ -740,15 +736,18 @@ DHUDMessageBase *DBaseStatusBar::DetachMessage (DHUDMessageBase *msg)
 	for (size_t i = 0; i < countof(Messages); ++i)
 	{
 		DHUDMessageBase *probe = Messages[i];
+		DObject* pointing = this;
 		DHUDMessageBase **prev = &Messages[i];
 
 		while (probe && probe != msg)
 		{
+			pointing = probe;
 			prev = &probe->Next;
 			probe = probe->Next;
 		}
 		if (probe != NULL)
 		{
+			GC::WriteBarrier(pointing, probe->Next);
 			*prev = probe->Next;
 			probe->Next = nullptr;
 			return probe;
@@ -761,16 +760,19 @@ DHUDMessageBase *DBaseStatusBar::DetachMessage (uint32_t id)
 {
 	for (size_t i = 0; i < countof(Messages); ++i)
 	{
+		DObject* pointing = this;
 		DHUDMessageBase *probe = Messages[i];
 		DHUDMessageBase **prev = &Messages[i];
 
 		while (probe && probe->SBarID != id)
 		{
+			pointing = probe;
 			prev = &probe->Next;
 			probe = probe->Next;
 		}
 		if (probe != NULL)
 		{
+			GC::WriteBarrier(pointing, probe->Next);
 			*prev = probe->Next;
 			probe->Next = nullptr;
 			return probe;
@@ -881,9 +883,16 @@ void DBaseStatusBar::DrawCrosshair ()
 	double size;
 	int w, h;
 
+	if (!crosshairon)
+	{
+		return;
+	}
+
 	// Don't draw the crosshair in chasecam mode
 	if (players[consoleplayer].cheats & CF_CHASECAM)
+	{
 		return;
+	}
 
 	ST_LoadCrosshair();
 
@@ -909,15 +918,15 @@ void DBaseStatusBar::DrawCrosshair ()
 	w = int(CrosshairImage->GetWidth() * size);
 	h = int(CrosshairImage->GetHeight() * size);
 
-	if (crosshairhealth)
-	{
+	if (crosshairhealth == 1) {
+		// "Standard" crosshair health (green-red)
 		int health = Scale(CPlayer->health, 100, CPlayer->mo->GetDefault()->health);
 
 		if (health >= 85)
 		{
 			color = 0x00ff00;
 		}
-		else 
+		else
 		{
 			int red, green;
 			health -= 25;
@@ -937,6 +946,21 @@ void DBaseStatusBar::DrawCrosshair ()
 			}
 			color = (red<<16) | (green<<8);
 		}
+	}
+	else if (crosshairhealth == 2)
+	{
+		// "Enhanced" crosshair health (blue-green-yellow-red)
+		int health = clamp(Scale(CPlayer->health, 100, CPlayer->mo->GetDefault()->health), 0, 200);
+		float rr, gg, bb;
+
+		float saturation = health < 150 ? 1.f : 1.f - (health - 150) / 100.f;
+
+		HSVtoRGB(&rr, &gg, &bb, health * 1.2f, saturation, 1);
+		int red = int(rr * 255);
+		int green = int(gg * 255);
+		int blue = int(bb * 255);
+
+		color = (red<<16) | (green<<8) | blue;
 	}
 	else
 	{
@@ -1050,8 +1074,9 @@ void DBaseStatusBar::CallDraw(EHudState state, double ticFrac)
 void DBaseStatusBar::DrawLog ()
 {
 	int hudwidth, hudheight;
+	const FString & text = (inter_subtitles && CPlayer->SubtitleCounter) ? CPlayer->SubtitleText : CPlayer->LogText;
 
-	if (CPlayer->LogText.IsNotEmpty())
+	if (text.IsNotEmpty())
 	{
 		// This uses the same scaling as regular HUD messages
 		auto scale = active_con_scaletext();
@@ -1059,7 +1084,7 @@ void DBaseStatusBar::DrawLog ()
 		hudheight = SCREENHEIGHT / scale;
 
 		int linelen = hudwidth<640? Scale(hudwidth,9,10)-40 : 560;
-		auto lines = V_BreakLines (SmallFont, linelen, GStrings(CPlayer->LogText));
+		auto lines = V_BreakLines (SmallFont, linelen, text[0] == '$'? GStrings(text.GetChars()+1) : text.GetChars());
 		int height = 20;
 
 		for (unsigned i = 0; i < lines.Size(); i++) height += SmallFont->GetHeight () + 1;
@@ -1075,7 +1100,7 @@ void DBaseStatusBar::DrawLog ()
 		else
 		{
 			x=(hudwidth>>1)-300;
-			y=hudheight*3/10-(height>>1);
+			y=hudheight/8-(height>>1);
 			if (y<0) y=0;
 			w=600;
 		}
@@ -1085,7 +1110,7 @@ void DBaseStatusBar::DrawLog ()
 		y+=10;
 		for (const FBrokenLines &line : lines)
 		{
-			screen->DrawText (SmallFont, CR_UNTRANSLATED, x, y, line.Text,
+			screen->DrawText (SmallFont, CPlayer->SubtitleCounter? CR_CYAN : CR_UNTRANSLATED, x, y, line.Text,
 				DTA_KeepRatio, true,
 				DTA_VirtualWidth, hudwidth, DTA_VirtualHeight, hudheight, TAG_DONE);
 			y += SmallFont->GetHeight ()+1;
@@ -1124,6 +1149,7 @@ void DBaseStatusBar::SetMugShotState(const char *stateName, bool waitTillDone, b
 
 void DBaseStatusBar::DrawBottomStuff (EHudState state)
 {
+	E_RenderUnderlay(state);
 	DrawMessages (HUDMSGLayer_UnderHUD, (state == HUD_StatusBar) ? GetTopOfStatusbar() : SCREENHEIGHT);
 }
 
@@ -1164,7 +1190,7 @@ void DBaseStatusBar::DrawTopStuff (EHudState state)
 
 	DrawConsistancy ();
 	DrawWaiting ();
-	if (ShowLog && MustDrawLog(state)) DrawLog ();
+	if ((ShowLog && MustDrawLog(state)) || (inter_subtitles && CPlayer->SubtitleCounter > 0)) DrawLog ();
 
 	if (noisedebug)
 	{
@@ -1485,27 +1511,29 @@ void DBaseStatusBar::DrawGraphic(FTextureID texture, double x, double y, int fla
 //
 //============================================================================
 
-void DBaseStatusBar::DrawString(FFont *font, const FString &cstring, double x, double y, int flags, double Alpha, int translation, int spacing, EMonospacing monospacing, int shadowX, int shadowY)
+void DBaseStatusBar::DrawString(FFont *font, const FString &cstring, double x, double y, int flags, double Alpha, int translation, int spacing, EMonospacing monospacing, int shadowX, int shadowY, double scaleX, double scaleY)
 {
 	bool monospaced = monospacing != EMonospacing::MOff;
+	double dx = 0;
 
 	switch (flags & DI_TEXT_ALIGN)
 	{
 	default:
 		break;
 	case DI_TEXT_ALIGN_RIGHT:
-		if (!monospaced)
-			x -= static_cast<int> (font->StringWidth(cstring) + (spacing * cstring.CharacterCount()));
-		else //monospaced, so just multiply the character size
-			x -= static_cast<int> ((spacing) * cstring.CharacterCount());
+		dx = monospaced
+			? static_cast<int> ((spacing)*cstring.CharacterCount()) //monospaced, so just multiply the character size
+			: static_cast<int> (font->StringWidth(cstring) + (spacing * cstring.CharacterCount()));
 		break;
 	case DI_TEXT_ALIGN_CENTER:
-		if (!monospaced)
-			x -= static_cast<int> (font->StringWidth(cstring) + (spacing * cstring.CharacterCount())) / 2;
-		else //monospaced, so just multiply the character size
-			x -= static_cast<int> ((spacing)* cstring.CharacterCount()) / 2;
+		dx = monospaced
+			? static_cast<int> ((spacing)*cstring.CharacterCount()) / 2 //monospaced, so just multiply the character size
+			: static_cast<int> (font->StringWidth(cstring) + (spacing * cstring.CharacterCount())) / 2;
 		break;
 	}
+
+	// Take text scale into account
+	x -= dx * scaleX;
 
 	const uint8_t* str = (const uint8_t*)cstring.GetChars();
 	const EColorRange boldTranslation = EColorRange(translation ? translation - 1 : NumTextColors - 1);
@@ -1591,6 +1619,11 @@ void DBaseStatusBar::DrawString(FFont *font, const FString &cstring, double x, d
 			rx += orgx;
 			ry += orgy;
 		}
+
+		// Apply text scale
+		rw *= scaleX;
+		rh *= scaleY;
+
 		// This is not really such a great way to draw shadows because they can overlap with previously drawn characters.
 		// This may have to be changed to draw the shadow text up front separately.
 		if ((shadowX != 0 || shadowY != 0) && !(flags & DI_NOSHADOW))
@@ -1608,14 +1641,16 @@ void DBaseStatusBar::DrawString(FFont *font, const FString &cstring, double x, d
 			DTA_Alpha, Alpha,
 			TAG_DONE);
 
-		if (!monospaced)
-			x += width + spacing - (c->GetLeftOffset(0) + 1);
-		else
-			x += spacing;
+		dx = monospaced 
+			? spacing
+			: width + spacing - (c->GetLeftOffset(0) + 1);
+
+		// Take text scale into account
+		x += dx * scaleX;
 	}
 }
 
-void SBar_DrawString(DBaseStatusBar *self, DHUDFont *font, const FString &string, double x, double y, int flags, int trans, double alpha, int wrapwidth, int linespacing)
+void SBar_DrawString(DBaseStatusBar *self, DHUDFont *font, const FString &string, double x, double y, int flags, int trans, double alpha, int wrapwidth, int linespacing, double scaleX, double scaleY)
 {
 	if (font == nullptr) ThrowAbortException(X_READ_NIL, nullptr);
 	if (!screen->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
@@ -1631,16 +1666,16 @@ void SBar_DrawString(DBaseStatusBar *self, DHUDFont *font, const FString &string
 
 	if (wrapwidth > 0)
 	{
-		auto brk = V_BreakLines(font->mFont, wrapwidth, string, true);
+		auto brk = V_BreakLines(font->mFont, int(wrapwidth * scaleX), string, true);
 		for (auto &line : brk)
 		{
-			self->DrawString(font->mFont, line.Text, x, y, flags, alpha, trans, font->mSpacing, font->mMonospacing, font->mShadowX, font->mShadowY);
-			y += font->mFont->GetHeight() + linespacing;
+			self->DrawString(font->mFont, line.Text, x, y, flags, alpha, trans, font->mSpacing, font->mMonospacing, font->mShadowX, font->mShadowY, scaleX, scaleY);
+			y += (font->mFont->GetHeight() + linespacing) * scaleY;
 		}
 	}
 	else
 	{
-		self->DrawString(font->mFont, string, x, y, flags, alpha, trans, font->mSpacing, font->mMonospacing, font->mShadowX, font->mShadowY);
+		self->DrawString(font->mFont, string, x, y, flags, alpha, trans, font->mSpacing, font->mMonospacing, font->mShadowX, font->mShadowY, scaleX, scaleY);
 	}
 }
 

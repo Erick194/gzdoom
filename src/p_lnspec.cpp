@@ -1299,11 +1299,9 @@ FUNC(LS_Thing_ChangeTID)
 {
 	if (arg0 == 0)
 	{
-		if (it != NULL && !(it->ObjectFlags & OF_EuthanizeMe))
+		if (it != nullptr)
 		{
-			it->RemoveFromHash ();
-			it->tid = arg1;
-			it->AddToHash ();
+			it->SetTID(arg1);
 		}
 	}
 	else
@@ -1317,12 +1315,7 @@ FUNC(LS_Thing_ChangeTID)
 			actor = next;
 			next = iterator.Next ();
 
-			if (!(actor->ObjectFlags & OF_EuthanizeMe))
-			{
-				actor->RemoveFromHash ();
-				actor->tid = arg1;
-				actor->AddToHash ();
-			}
+			actor->SetTID(arg1);
 		}
 	}
 	return true;
@@ -2180,7 +2173,7 @@ FUNC(LS_UsePuzzleItem)
 	}
 
 	// [RH] Say "hmm" if you don't have the puzzle item
-	S_Sound (it, CHAN_VOICE, "*puzzfail", 1, ATTN_IDLE);
+	S_Sound (it, CHAN_VOICE, 0, "*puzzfail", 1, ATTN_IDLE);
 	return false;
 }
 
@@ -3198,10 +3191,11 @@ FUNC(LS_SendToCommunicator)
 			it->player->SetLogNumber (arg0);
 		}
 
-		if (it->CheckLocalView (consoleplayer))
+		if (it->CheckLocalView())
 		{
 			S_StopSound (CHAN_VOICE);
-			S_Sound (CHAN_VOICE, name, 1, ATTN_NORM);
+			it->player->SetSubtitle(arg0, name);
+			S_Sound (CHAN_VOICE, 0, name, 1, ATTN_NORM);
 
 			// Get the message from the LANGUAGE lump.
 			FString msg;

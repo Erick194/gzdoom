@@ -596,7 +596,6 @@ void DInterBackground::drawBackground(int state, bool drawsplat, bool snl_pointe
 			// placing the animations precisely where they belong on the base pic
 			animwidth = background->GetScaledWidthDouble();
 			animheight = background->GetScaledHeightDouble();
-			screen->FillBorder(NULL);
 			screen->DrawTexture(background, 0, 0, DTA_Fullscreen, true, TAG_DONE);
 		}
 		else
@@ -721,6 +720,7 @@ void WI_Drawer()
 		ScaleOverrider s;
 		IFVIRTUALPTRNAME(WI_Screen, "StatusScreen", Drawer)
 		{
+			screen->FillBorder(nullptr);
 			VMValue self = WI_Screen;
 			VMCall(func, &self, 1, nullptr, 0);
 			screen->ClearClipRect();	// make sure the scripts don't leave a valid clipping rect behind.
@@ -767,8 +767,6 @@ void WI_Start(wbstartstruct_t *wbstartstruct)
 	}
 	else wbstartstruct->nextname = info->LookupLevelName();
 	V_SetBlend(0, 0, 0, 0);
-	S_StopAllChannels();
-	SN_StopAllSequences();
 	WI_Screen = cls->CreateNew();
 	ScaleOverrider s;
 	IFVIRTUALPTRNAME(WI_Screen, "StatusScreen", Start)
@@ -860,6 +858,8 @@ DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, next_ep);
 DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, current);
 DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, next);
 DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, nextname);
+DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, nextauthor);
+DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, thisauthor);
 DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, LName0);
 DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, LName1);
 DEFINE_FIELD_X(WBStartStruct, wbstartstruct_t, maxkills);

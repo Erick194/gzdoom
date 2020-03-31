@@ -432,8 +432,6 @@ void StartNetwork (bool autoPort)
 	}
 #endif
 
-	atterm (CloseNetwork);
-
 	netgame = true;
 	multiplayer = true;
 	
@@ -649,7 +647,7 @@ bool Host_SendAllHere (void *userdata)
 	return gotack[MAXNETNODES] == doomcom.numnodes - 1;
 }
 
-void HostGame (int i)
+bool HostGame (int i)
 {
 	PreGamePacket packet;
 	int numplayers;
@@ -664,7 +662,6 @@ void HostGame (int i)
 	if (numplayers > MAXNETNODES)
 	{
 		I_FatalError("You cannot host a game with %d players. The limit is currently %d.", numplayers, MAXNETNODES);
-		return;
 	}
 
 	if (numplayers == 1)
@@ -674,7 +671,7 @@ void HostGame (int i)
 		doomcom.id = DOOMCOM_ID;
 		doomcom.numplayers = doomcom.numnodes = 1;
 		doomcom.consoleplayer = 0;
-		return;
+		return true;
 	}
 
 	StartNetwork (false);
@@ -686,14 +683,13 @@ void HostGame (int i)
 
 	doomcom.numnodes = 1;
 
-	atterm (SendAbort);
-
 	StartScreen->NetInit ("Waiting for players", numplayers);
 
 	// Wait for numplayers-1 different connections
 	if (!StartScreen->NetLoop (Host_CheckForConnects, (void *)(intptr_t)numplayers))
 	{
-		exit (0);
+		SendAbort();
+		return false;
 	}
 
 	// Now inform everyone of all machines involved in the game
@@ -703,10 +699,9 @@ void HostGame (int i)
 
 	if (!StartScreen->NetLoop (Host_SendAllHere, (void *)gotack))
 	{
-		exit (0);
+		SendAbort();
+		return false;
 	}
-
-	popterm ();
 
 	// Now go
 	StartScreen->NetMessage ("Go");
@@ -732,6 +727,7 @@ void HostGame (int i)
 	{
 		sendplayer[i] = i;
 	}
+	return true;
 }
 
 // This routine is used by a guest to notify the host of its presence.
@@ -841,7 +837,7 @@ bool Guest_WaitForOthers (void *userdata)
 	return false;
 }
 
-void JoinGame (int i)
+bool JoinGame (int i)
 {
 	if ((i == Args->NumArgs() - 1) ||
 		(Args->GetArg(i+1)[0] == '-') ||
@@ -855,28 +851,28 @@ void JoinGame (int i)
 	sendplayer[1] = 0;
 	doomcom.numnodes = 2;
 
-	atterm (SendAbort);
 
 	// Let host know we are here
 	StartScreen->NetInit ("Contacting host", 0);
 
 	if (!StartScreen->NetLoop (Guest_ContactHost, NULL))
 	{
-		exit (0);
+		SendAbort();
+		return false;
 	}
 
 	// Wait for everyone else to connect
 	if (!StartScreen->NetLoop (Guest_WaitForOthers, 0))
 	{
-		exit (0);
+		SendAbort();
+		return false;
 	}
-
-	popterm ();
-
+	
 	StartScreen->NetMessage ("Total players: %d", doomcom.numnodes);
 
 	doomcom.id = DOOMCOM_ID;
 	doomcom.numplayers = doomcom.numnodes;
+	return true;
 }
 
 static int PrivateNetOf(in_addr in)
@@ -936,7 +932,7 @@ static bool NodesOnSameNetwork()
 //
 // Returns true if packet server mode might be a good idea.
 //
-bool I_InitNetwork (void)
+int I_InitNetwork (void)
 {
 	int i;
 	const char *v;
@@ -966,11 +962,11 @@ bool I_InitNetwork (void)
 	//		player x: -join <player 1's address>
 	if ( (i = Args->CheckParm ("-host")) )
 	{
-		HostGame (i);
+		if (!HostGame (i)) return -1;
 	}
 	else if ( (i = Args->CheckParm ("-join")) )
 	{
-		JoinGame (i);
+		if (!JoinGame (i)) return -1;
 	}
 	else
 	{

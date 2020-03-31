@@ -60,6 +60,14 @@ void FDrawInfo::DrawPSprite (HUDSprite *huds)
 	}
 	gl_SetRenderStyle(huds->RenderStyle, false, false);
 	gl_RenderState.SetObjectColor(huds->ObjectColor);
+	if (huds->owner->Sector)
+	{
+		gl_RenderState.SetAddColor(huds->owner->Sector->AdditiveColors[sector_t::sprites] | 0xff000000);
+	}
+	else
+	{
+		gl_RenderState.SetAddColor(0);
+	}
 	gl_RenderState.SetDynLight(huds->dynrgb[0], huds->dynrgb[1], huds->dynrgb[2]);
 	gl_RenderState.EnableBrightmap(!(huds->RenderStyle.Flags & STYLEF_ColorIsFixed));
 
@@ -73,13 +81,14 @@ void FDrawInfo::DrawPSprite (HUDSprite *huds)
 	{
 		float thresh = (huds->tex->tex->GetTranslucency() || huds->OverrideShader != -1) ? 0.f : gl_mask_sprite_threshold;
 		gl_RenderState.AlphaFunc(GL_GEQUAL, thresh);
-		gl_RenderState.SetMaterial(huds->tex, CLAMP_XY_NOMIP, 0, huds->OverrideShader, !!(huds->RenderStyle.Flags & STYLEF_RedIsAlpha));
+		gl_RenderState.SetMaterial(huds->tex, CLAMP_XY_NOMIP, (huds->weapon->Flags & PSPF_PLAYERTRANSLATED) ? huds->owner->Translation : 0, huds->OverrideShader, !!(huds->RenderStyle.Flags & STYLEF_RedIsAlpha));
 		gl_RenderState.Apply();
 		GLRenderer->mVBO->RenderArray(GL_TRIANGLE_STRIP, huds->mx, 4);
 	}
 
 	gl_RenderState.AlphaFunc(GL_GEQUAL, gl_mask_sprite_threshold);
 	gl_RenderState.SetObjectColor(0xffffffff);
+	gl_RenderState.SetAddColor(0);
 	gl_RenderState.SetDynLight(0, 0, 0);
 	gl_RenderState.EnableBrightmap(false);
 }
@@ -94,8 +103,8 @@ void FDrawInfo::DrawPlayerSprites(bool hudModelStep)
 {
 	s3d::Stereo3DMode::getCurrentMode().AdjustPlayerSprites();
 
-	int oldlightmode = level.lightmode;
-	if (!hudModelStep && level.lightmode >= 8) level.lightmode = 2;	// Software lighting cannot handle 2D content so revert to lightmode 2 for that.
+	auto oldlightmode = level.lightmode;
+	if (!hudModelStep && level.isSoftwareLighting()) level.SetFallbackLightMode();	// Software lighting cannot handle 2D content.
 	for(auto &hudsprite : hudsprites)
 	{
 		if ((!!hudsprite.mframe) == hudModelStep)

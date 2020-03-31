@@ -1741,6 +1741,8 @@ static double DoFLOP(int flop, double v)
 	case FLOP_COSH:		return g_cosh(v);
 	case FLOP_SINH:		return g_sinh(v);
 	case FLOP_TANH:		return g_tanh(v);
+
+	case FLOP_ROUND:	return round(v);
 	}
 	assert(0);
 	return 0;
@@ -1835,7 +1837,7 @@ static void DoCast(const VMRegisters &reg, const VMFrame *f, int a, int b, int c
 
 	case CAST_So2S:
 		ASSERTS(a); ASSERTD(b);
-		reg.s[a] = S_sfx[reg.d[b]].name;
+		reg.s[a] = S_GetSoundName(reg.d[b]);
 		break;
 
 	case CAST_SID2S:

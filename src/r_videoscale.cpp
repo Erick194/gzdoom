@@ -1,25 +1,34 @@
-// 
-//---------------------------------------------------------------------------
-//
-// Copyright(C) 2017 Magnus Norddahl
-// Copyright(C) 2018 Rachael Alexanderson
-// All rights reserved.
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//--------------------------------------------------------------------------
-//
+/*---------------------------------------------------------------------------
+**
+** Copyright(C) 2017 Magnus Norddahl
+** Copyright(C) 2017-2020 Rachael Alexanderson
+** All rights reserved.
+**
+** Redistribution and use in source and binary forms, with or without
+** modification, are permitted provided that the following conditions
+** are met:
+**
+** 1. Redistributions of source code must retain the above copyright
+**    notice, this list of conditions and the following disclaimer.
+** 2. Redistributions in binary form must reproduce the above copyright
+**    notice, this list of conditions and the following disclaimer in the
+**    documentation and/or other materials provided with the distribution.
+** 3. The name of the author may not be used to endorse or promote products
+**    derived from this software without specific prior written permission.
+**
+** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+**---------------------------------------------------------------------------
+**
+*/
 
 #include <math.h>
 #include "c_dispatch.h"
@@ -27,7 +36,7 @@
 #include "v_video.h"
 #include "templates.h"
 
-#define NUMSCALEMODES 6
+#define NUMSCALEMODES 7
 
 extern bool setsizeneeded;
 
@@ -61,6 +70,33 @@ namespace
 		bool isScaled43;
 		bool isCustom;
 	};
+
+	float v_MinimumToFill()
+	{
+		// sx = screen x dimension, sy = same for y
+		float sx = (float)screen->GetClientWidth(), sy = (float)screen->GetClientHeight();
+		static float lastsx = 0., lastsy = 0., result = 0.;
+		if (lastsx != sx || lastsy != sy)
+		{
+			if (sx <= 0. || sy <= 0.)
+				return 1.; // prevent x/0 error
+			// set absolute minimum scale to fill the entire screen but get as close to 320x200 as possible
+			float ssx = (float)320. / sx, ssy = (float)200. / sy;
+			result = (ssx < ssy) ? ssy : ssx;
+			lastsx = sx;
+			lastsy = sy;
+		}
+		return result;
+	}
+	inline uint32_t v_mfillX()
+	{
+		return screen ? (uint32_t)((float)screen->GetClientWidth() * v_MinimumToFill()) : 640;
+	}
+	inline uint32_t v_mfillY()
+	{
+		return screen ? (uint32_t)((float)screen->GetClientHeight() * v_MinimumToFill()) : 400;
+	}
+
 	v_ScaleTable vScaleTable[NUMSCALEMODES] =
 	{
 		//	isValid,	isLinear,	GetScaledWidth(),									            	GetScaledHeight(),										        	isScaled43, isCustom
@@ -68,8 +104,9 @@ namespace
 		{ true,			true,		[](uint32_t Width)->uint32_t { return Width; },			        [](uint32_t Height)->uint32_t { return Height; },	        		false,  	false   },	// 1  - Native (Linear)
 		{ true,			false,		[](uint32_t Width)->uint32_t { return 320; },		            	[](uint32_t Height)->uint32_t { return 200; },			        	true,   	false   },	// 2  - 320x200
 		{ true,			false,		[](uint32_t Width)->uint32_t { return 640; },		            	[](uint32_t Height)->uint32_t { return 400; },				        true,   	false   },	// 3  - 640x400
-		{ true,			true,		[](uint32_t Width)->uint32_t { return 1280; },		            	[](uint32_t Height)->uint32_t { return 800; },	        			true,   	false   },	// 4  - 1280x800		
+		{ true,			true,		[](uint32_t Width)->uint32_t { return 1280; },		            	[](uint32_t Height)->uint32_t { return 800; },	        			true,   	false   },	// 4  - 1280x800
 		{ true,			true,		[](uint32_t Width)->uint32_t { return vid_scale_customwidth; },	[](uint32_t Height)->uint32_t { return vid_scale_customheight; },	true,   	true    },	// 5  - Custom
+		{ true,			false,		[](uint32_t Width)->uint32_t { return v_mfillX(); },				[](uint32_t Height)->uint32_t { return v_mfillY(); },				false,		false   },	// 6  - Minimum Scale to Fill Entire Screen
 	};
 	bool isOutOfBounds(int x)
 	{

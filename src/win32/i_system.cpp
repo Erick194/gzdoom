@@ -102,6 +102,8 @@ extern void LayoutMainWindow(HWND hWnd, HWND pane);
 
 // PUBLIC FUNCTION PROTOTYPES ----------------------------------------------
 
+void DestroyCustomCursor();
+
 // PRIVATE FUNCTION PROTOTYPES ---------------------------------------------
 
 static void CalculateCPUSpeed();
@@ -109,11 +111,9 @@ static void CalculateCPUSpeed();
 static HCURSOR CreateCompatibleCursor(FTexture *cursorpic);
 static HCURSOR CreateAlphaCursor(FTexture *cursorpic);
 static HCURSOR CreateBitmapCursor(int xhot, int yhot, HBITMAP and_mask, HBITMAP color_mask);
-static void DestroyCustomCursor();
 
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
-EXTERN_CVAR(String, language);
 EXTERN_CVAR (Bool, queryiwad);
 // Used on welcome/IWAD screen.
 EXTERN_CVAR (Bool, fullscreen)
@@ -135,17 +135,14 @@ CVAR (String, queryiwad_key, "shift", CVAR_GLOBALCONFIG|CVAR_ARCHIVE);
 CVAR (Bool, con_debugoutput, false, 0);
 
 double PerfToSec, PerfToMillisec;
-uint32_t LanguageIDs[4];
 
 UINT TimerPeriod;
 
-bool gameisdead;
 int sys_ostype = 0;
 
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
 static ticcmd_t emptycmd;
-static bool HasExited;
 
 static WadStuff *WadList;
 static int NumWads;
@@ -246,18 +243,9 @@ void I_DetectOS(void)
 			}
 			else if (info.dwMinorVersion == 3)
 			{
-				osname = (info.wProductType == VER_NT_WORKSTATION) ? "8.1" : "Server 2012 R2";
-				sys_ostype = 2; // supported OS
+				osname = (info.wProductType == VER_NT_WORKSTATION) ? "10 or 8.1" : "Server 2016 or 2012 R2";
+				sys_ostype = 3; // modern OS
 			}
-			else if (info.dwMinorVersion == 4)
-			{
-				osname = (info.wProductType == VER_NT_WORKSTATION) ? "10 (beta)" : "Server 10 (beta)";
-			}
-		}
-		else if (info.dwMajorVersion == 10)
-		{
-			osname = (info.wProductType == VER_NT_WORKSTATION) ? "10 (or higher)" : "Server 10 (or higher)";
-			sys_ostype = 3; // modern OS
 		}
 		break;
 
@@ -266,10 +254,11 @@ void I_DetectOS(void)
 		break;
 	}
 
-	if (!batchrun) Printf ("OS: Windows %s (NT %lu.%lu) Build %lu\n    %s\n",
+	if (!batchrun && info.dwMinorVersion != 3) Printf ("OS: Windows %s (NT %lu.%lu) Build %lu\n    %s\n",
 			osname,
 			info.dwMajorVersion, info.dwMinorVersion,
 			info.dwBuildNumber, info.szCSDVersion);
+	else if (!batchrun) Printf ("OS: Windows %s\n", osname);
 }
 
 //==========================================================================
@@ -339,97 +328,8 @@ void I_Init()
 	CheckCPUID(&CPU);
 	CalculateCPUSpeed();
 	DumpCPUInfo(&CPU);
-
-	atterm (I_ShutdownSound);
-	I_InitSound ();
 }
 
-//==========================================================================
-//
-// I_Quit
-//
-//==========================================================================
-
-void I_Quit()
-{
-	HasExited = true;		/* Prevent infinitely recursive exits -- killough */
-
-	timeEndPeriod(TimerPeriod);
-
-	if (demorecording)
-	{
-		G_CheckDemoStatus();
-	}
-
-	C_DeinitConsole();
-}
-
-
-//==========================================================================
-//
-// I_FatalError
-//
-// Throw an error that will end the game.
-//
-//==========================================================================
-
-void I_FatalError(const char *error, ...)
-{
-	static BOOL alreadyThrown = false;
-	gameisdead = true;
-
-	if (!alreadyThrown)		// ignore all but the first message -- killough
-	{
-		alreadyThrown = true;
-		char errortext[MAX_ERRORTEXT];
-		va_list argptr;
-		va_start(argptr, error);
-		myvsnprintf(errortext, MAX_ERRORTEXT, error, argptr);
-		va_end(argptr);
-		OutputDebugStringA(errortext);
-
-		// Record error to log (if logging)
-		if (Logfile)
-		{
-			fprintf(Logfile, "\n**** DIED WITH FATAL ERROR:\n%s\n", errortext);
-			fflush(Logfile);
-		}
-
-		throw CFatalError(errortext);
-	}
-
-	if (!HasExited)		// If it hasn't exited yet, exit now -- killough
-	{
-		HasExited = 1;	// Prevent infinitely recursive exits -- killough
-		exit(-1);
-	}
-}
-
-//==========================================================================
-//
-// I_Error
-//
-// Throw an error that will send us to the console if we are far enough
-// along in the startup process.
-//
-//==========================================================================
-
-void I_Error(const char *error, ...)
-{
-	va_list argptr;
-	char errortext[MAX_ERRORTEXT];
-
-	va_start(argptr, error);
-	myvsnprintf(errortext, MAX_ERRORTEXT, error, argptr);
-	va_end(argptr);
-	if (IsDebuggerPresent())
-	{
-		auto wstr = WideString(errortext);
-		OutputDebugStringW(wstr.c_str());
-	}
-
-	throw CRecoverableError(errortext);
-}
 
 //==========================================================================
 //
@@ -591,8 +491,11 @@ static TArray<FString> bufferedConsoleStuff;
 
 void I_DebugPrint(const char *cp)
 {
-	auto wstr = WideString(cp);
-	OutputDebugStringW(wstr.c_str());
+	if (IsDebuggerPresent())
+	{
+		auto wstr = WideString(cp);
+		OutputDebugStringW(wstr.c_str());
+	}
 }
 
 void I_PrintStr(const char *cp)
@@ -804,7 +707,6 @@ bool I_SetCursor(FTexture *cursorpic)
 		// Replace the existing cursor with the new one.
 		DestroyCustomCursor();
 		CustomCursor = cursor;
-		atterm(DestroyCustomCursor);
 	}
 	else
 	{
@@ -1012,7 +914,7 @@ static HCURSOR CreateBitmapCursor(int xhot, int yhot, HBITMAP and_mask, HBITMAP 
 //
 //==========================================================================
 
-static void DestroyCustomCursor()
+void DestroyCustomCursor()
 {
 	if (CustomCursor != NULL)
 	{

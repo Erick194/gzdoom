@@ -285,6 +285,7 @@ public:
 
 	FColormap Colormap;	// light and fog
 	PalEntry FlatColor;
+	PalEntry AddColor;
 	ERenderStyle renderstyle;
 
 	float alpha;
@@ -328,7 +329,7 @@ public:
 
 	int translation;
 	int index;
-	int depth;
+	float depth;
 
 	float topclip;
 	float bottomclip;
@@ -339,15 +340,15 @@ public:
 	float vt,vb;
 	float x1,y1,z1;
 	float x2,y2,z2;
+	float trans;
+	int dynlightindex;
 
 	FMaterial *gltexture;
-	float trans;
 	AActor * actor;
 	particle_t * particle;
 	TArray<lightlist_t> *lightlist;
 	DRotator Angles;
 
-	int dynlightindex;
 
 	void SplitSprite(HWDrawInfo *di, sector_t * frontsector, bool translucent);
 	void PerformSpriteClipAdjustment(AActor *thing, const DVector2 &thingpos, float spriteheight);

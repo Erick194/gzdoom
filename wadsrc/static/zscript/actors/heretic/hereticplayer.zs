@@ -21,17 +21,17 @@ class HereticPlayer : PlayerPawn
 		Player.WeaponSlot 7, "Mace";
 
 		Player.ColorRange 225, 240;
-		Player.Colorset 0, "Green",			225, 240,  238;
-		Player.Colorset 1, "Yellow",		114, 129,  127;
-		Player.Colorset 2, "Red",			145, 160,  158;
-		Player.Colorset 3, "Blue",			190, 205,  203;
+		Player.Colorset 0, "$TXT_COLOR_GREEN",		225, 240,  238;
+		Player.Colorset 1, "$TXT_COLOR_YELLOW",		114, 129,  127;
+		Player.Colorset 2, "$TXT_COLOR_RED",		145, 160,  158;
+		Player.Colorset 3, "$TXT_COLOR_BLUE",		190, 205,  203;
 		// Doom Legacy additions
-		Player.Colorset 4, "Brown",			 67,  82,   80;
-		Player.Colorset 5, "Light Gray",	  9,  24,   22;
-		Player.Colorset 6, "Light Brown",	 74,  89,   87;
-		Player.Colorset 7, "Light Red",		150, 165,  163;
-		Player.Colorset 8, "Light Blue",	192, 207,  205;
-		Player.Colorset 9, "Beige",			 95, 110,  108;
+		Player.Colorset 4, "$TXT_COLOR_BROWN",		 67,  82,   80;
+		Player.Colorset 5, "$TXT_COLOR_LIGHTGRAY",	  9,  24,   22;
+		Player.Colorset 6, "$TXT_COLOR_LIGHTBROWN",	 74,  89,   87;
+		Player.Colorset 7, "$TXT_COLOR_LIGHTRED",	150, 165,  163;
+		Player.Colorset 8, "$TXT_COLOR_LIGHTBLUE",	192, 207,  205;
+		Player.Colorset 9, "$TXT_COLOR_BEIGE",		 95, 110,  108;
 	}
 
 	States
@@ -68,13 +68,13 @@ class HereticPlayer : PlayerPawn
 		PLAY Y -1;
 		Stop;
 	Burn:
-		FDTH A 5 BRIGHT A_PlaySound("*burndeath");
+		FDTH A 5 BRIGHT A_StartSound("*burndeath");
 		FDTH B 4 BRIGHT;
 		FDTH C 5 BRIGHT;
 		FDTH D 4 BRIGHT A_PlayerScream;
 		FDTH E 5 BRIGHT;
 		FDTH F 4 BRIGHT;
-		FDTH G 5 BRIGHT A_PlaySound("*burndeath");
+		FDTH G 5 BRIGHT A_StartSound("*burndeath");
 		FDTH H 4 BRIGHT;
 		FDTH I 5 BRIGHT;
 		FDTH J 4 BRIGHT;

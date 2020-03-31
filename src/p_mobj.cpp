@@ -186,6 +186,8 @@ AActor::~AActor ()
 //
 //==========================================================================
 
+
+
 #define A(a,b) ((a), (b), def->b)
 
 void AActor::Serialize(FSerializer &arc)
@@ -364,7 +366,8 @@ void AActor::Serialize(FSerializer &arc)
 		A("friendlyseeblocks", friendlyseeblocks)
 		A("spawntime", SpawnTime)
 		A("spawnorder", SpawnOrder)
-		A("friction", Friction);
+		A("friction", Friction)
+		A("userlights", UserLights);
 }
 
 #undef A
@@ -585,7 +588,7 @@ bool AActor::SetState (FState *newstate, bool nofunction)
 		newstate = newstate->GetNextState();
 	} while (tics == 0);
 
-	SetDynamicLights();
+	flags8 |= MF8_RECREATELIGHTS;
 	return true;
 }
 
@@ -953,18 +956,18 @@ DEFINE_ACTION_FUNCTION(AActor, GiveBody)
 //
 //============================================================================
 
-bool AActor::CheckLocalView (int playernum) const
+bool AActor::CheckLocalView() const
 {
-	if (players[playernum].camera == this)
+	if (players[consoleplayer].camera == this)
 	{
 		return true;
 	}
-	if (players[playernum].mo != this || players[playernum].camera == NULL)
+	if (players[consoleplayer].mo != this || players[consoleplayer].camera == NULL)
 	{
 		return false;
 	}
-	if (players[playernum].camera->player == NULL &&
-		!(players[playernum].camera->flags3 & MF3_ISMONSTER))
+	if (players[consoleplayer].camera->player == NULL &&
+		!(players[consoleplayer].camera->flags3 & MF3_ISMONSTER))
 	{
 		return true;
 	}
@@ -975,7 +978,7 @@ DEFINE_ACTION_FUNCTION(AActor, CheckLocalView)
 {
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_INT(cp);
-	ACTION_RETURN_BOOL(self->CheckLocalView(cp));
+	ACTION_RETURN_BOOL(self->CheckLocalView());
 }
 
 //============================================================================
@@ -1192,7 +1195,7 @@ bool AActor::Grind(bool items)
 			SetState (state);
 			if (isgeneric)	// Not a custom crush state, so colorize it appropriately.
 			{
-				S_Sound (this, CHAN_BODY, "misc/fallingsplat", 1, ATTN_IDLE);
+				S_Sound (this, CHAN_BODY, 0, "misc/fallingsplat", 1, ATTN_IDLE);
 				Translation = BloodTranslation;
 			}
 			return false;
@@ -1236,7 +1239,7 @@ bool AActor::Grind(bool items)
 				gib->radius = 0;
 				gib->Translation = BloodTranslation;
 			}
-			S_Sound (this, CHAN_BODY, "misc/fallingsplat", 1, ATTN_IDLE);
+			S_Sound (this, CHAN_BODY, 0, "misc/fallingsplat", 1, ATTN_IDLE);
 		}
 		if (flags & MF_ICECORPSE)
 		{
@@ -1338,7 +1341,7 @@ bool AActor::Massacre ()
 //
 //----------------------------------------------------------------------------
 
-void P_ExplodeMissile (AActor *mo, line_t *line, AActor *target, bool onsky)
+void P_ExplodeMissile (AActor *mo, line_t *line, AActor *target, bool onsky, FName damageType)
 {
 	// [ZZ] line damage callback
 	if (line)
@@ -1370,7 +1373,7 @@ void P_ExplodeMissile (AActor *mo, line_t *line, AActor *target, bool onsky)
 			if (nextstate == NULL) nextstate = mo->FindState(NAME_Death, NAME_Extreme);
 		}
 	}
-	if (nextstate == NULL) nextstate = mo->FindState(NAME_Death);
+	if (nextstate == NULL) nextstate = mo->FindState(NAME_Death, damageType);
 	
 	if (onsky || (line != NULL && line->special == Line_Horizon))
 	{
@@ -1435,7 +1438,7 @@ void P_ExplodeMissile (AActor *mo, line_t *line, AActor *target, bool onsky)
 	// play the sound before changing the state, so that AActor::OnDestroy can call S_RelinkSounds on it and the death state can override it.
 	if (mo->DeathSound)
 	{
-		S_Sound (mo, CHAN_VOICE, mo->DeathSound, 1,
+		S_Sound (mo, CHAN_VOICE, 0, mo->DeathSound, 1,
 			(mo->flags3 & MF3_FULLVOLDEATH) ? ATTN_NONE : ATTN_NORM);
 	}
 
@@ -1499,15 +1502,15 @@ void AActor::PlayBounceSound(bool onfloor)
 	{
 		if (BounceFlags & BOUNCE_UseSeeSound)
 		{
-			S_Sound (this, CHAN_VOICE, SeeSound, 1, ATTN_IDLE);
+			S_Sound (this, CHAN_VOICE, 0, SeeSound, 1, ATTN_IDLE);
 		}
 		else if (onfloor || WallBounceSound <= 0)
 		{
-			S_Sound (this, CHAN_VOICE, BounceSound, 1, ATTN_IDLE);
+			S_Sound (this, CHAN_VOICE, 0, BounceSound, 1, ATTN_IDLE);
 		}
 		else
 		{
-			S_Sound (this, CHAN_VOICE, WallBounceSound, 1, ATTN_IDLE);
+			S_Sound (this, CHAN_VOICE, 0, WallBounceSound, 1, ATTN_IDLE);
 		}
 	}
 }
@@ -2777,20 +2780,20 @@ static void PlayerLandedOnThing (AActor *mo, AActor *onmobj)
 	P_FallingDamage (mo);
 
 	// [RH] only make noise if alive
-	if (!mo->player->morphTics && mo->health > 0)
+	if (mo->health > 0 && !mo->player->morphTics)
 	{
 		grunted = false;
 		// Why should this number vary by gravity?
-		if (mo->health > 0 && mo->Vel.Z < -mo->player->mo->FloatVar(NAME_GruntSpeed))
+		if (mo->Vel.Z < -mo->player->mo->FloatVar(NAME_GruntSpeed))
 		{
-			S_Sound (mo, CHAN_VOICE, "*grunt", 1, ATTN_NORM);
+			S_Sound (mo, CHAN_VOICE, 0, "*grunt", 1, ATTN_NORM);
 			grunted = true;
 		}
 		if (onmobj != NULL || !Terrains[P_GetThingFloorType (mo)].IsLiquid)
 		{
 			if (!grunted || !S_AreSoundsEquivalent (mo, "*grunt", "*land"))
 			{
-				S_Sound (mo, CHAN_AUTO, "*land", 1, ATTN_NORM);
+				S_Sound (mo, CHAN_AUTO, 0, "*land", 1, ATTN_NORM);
 			}
 		}
 	}
@@ -2918,6 +2921,8 @@ void AActor::ClearTIDHashes ()
 //
 void AActor::AddToHash ()
 {
+	assert(!(ObjectFlags & OF_EuthanizeMe));
+
 	if (tid == 0)
 	{
 		iprev = NULL;
@@ -2957,6 +2962,23 @@ void AActor::RemoveFromHash ()
 	}
 	tid = 0;
 }
+
+void AActor::SetTID (int newTID)
+{
+	RemoveFromHash();
+
+	if (ObjectFlags & OF_EuthanizeMe)
+	{
+		// Do not assign TID and do not link actor into the hash
+		// if it was already destroyed and will be freed by GC
+		return;
+	}
+
+	tid = newTID;
+
+	AddToHash();
+}
+
 
 //==========================================================================
 //
@@ -3095,7 +3117,7 @@ void AActor::Howl ()
 	FSoundID howl = SoundVar(NAME_HowlSound);
 	if (!S_IsActorPlayingSomething(this, CHAN_BODY, howl))
 	{
-		S_Sound (this, CHAN_BODY, howl, 1, ATTN_NORM);
+		S_Sound (this, CHAN_BODY, 0, howl, 1, ATTN_NORM);
 	}
 }
 
@@ -3120,7 +3142,7 @@ bool AActor::Slam (AActor *thing)
 			// The charging monster may have died by the target's actions here.
 			if (health > 0)
 			{
-				if (SeeState != NULL) SetState (SeeState);
+				if (SeeState != NULL && !(flags8 & MF8_RETARGETAFTERSLAM)) SetState (SeeState);
 				else SetIdle();
 			}
 		}
@@ -3219,14 +3241,14 @@ bool AActor::AdjustReflectionAngle (AActor *thing, DAngle &angle)
 	return false;
 }
 
-int AActor::AbsorbDamage(int damage, FName dmgtype)
+int AActor::AbsorbDamage(int damage, FName dmgtype, AActor *inflictor, AActor *source, int flags)
 {
 	for (AActor *item = Inventory; item != nullptr; item = item->Inventory)
 	{
 		IFVIRTUALPTRNAME(item, NAME_Inventory, AbsorbDamage)
 		{
-			VMValue params[4] = { item, damage, dmgtype.GetIndex(), &damage };
-			VMCall(func, params, 4, nullptr, 0);
+			VMValue params[7] = { item, damage, dmgtype.GetIndex(), &damage, inflictor, source, flags };
+			VMCall(func, params, 7, nullptr, 0);
 		}
 	}
 	return damage;
@@ -3255,7 +3277,7 @@ void AActor::PlayActiveSound ()
 {
 	if (ActiveSound && !S_IsActorPlayingSomething (this, CHAN_VOICE, -1))
 	{
-		S_Sound (this, CHAN_VOICE, ActiveSound, 1,
+		S_Sound (this, CHAN_VOICE, 0, ActiveSound, 1,
 			(flags3 & MF3_FULLVOLACTIVE) ? ATTN_NONE : ATTN_IDLE);
 	}
 }
@@ -3873,7 +3895,7 @@ void AActor::Tick ()
 		// (for backwards compatibility this must check for lack of damage function, not for zero damage!)
 		if ((flags & MF_MISSILE) && Vel.X == 0 && Vel.Y == 0 && !IsZeroDamage())
 		{
-			Vel.X = MinVel;
+			VelFromAngle(MinVel);
 		}
 
 		// Handle X and Y velocities
@@ -3956,7 +3978,13 @@ void AActor::Tick ()
 					}
 					if (Vel.Z != 0 && (BounceFlags & BOUNCE_Actors))
 					{
-						P_BounceActor(this, onmo, true);
+						bool res = P_BounceActor(this, onmo, true);
+						// If the bouncer is a missile and has hit the other actor it needs to be exploded here
+						// to be in line with the case when an actor's side is hit.
+						if (!res && (flags & MF_MISSILE))
+						{
+							P_ExplodeMissile(this, nullptr, onmo);
+						}
 					}
 					else
 					{
@@ -4249,11 +4277,12 @@ void AActor::SplashCheck()
 
 bool AActor::UpdateWaterLevel(bool dosplash)
 {
+	int oldlevel = waterlevel;
+
 	if (dosplash) SplashCheck();
 
 	double fh = -FLT_MAX;
 	bool reset = false;
-	int oldlevel = waterlevel;
 
 	waterlevel = 0;
 
@@ -4334,7 +4363,7 @@ bool AActor::UpdateWaterLevel(bool dosplash)
 			if (oldlevel < 3 && waterlevel == 3)
 			{ 
 				// Our head just went under.
-				S_Sound(this, CHAN_VOICE, "*dive", 1, ATTN_NORM);
+				S_Sound(this, CHAN_VOICE, 0, "*dive", 1, ATTN_NORM);
 			}
 			else if (oldlevel == 3 && waterlevel < 3)
 			{ 
@@ -4342,7 +4371,7 @@ bool AActor::UpdateWaterLevel(bool dosplash)
 				if (player->air_finished > level.time)
 				{ 
 					// We hadn't run out of air yet.
-					S_Sound(this, CHAN_VOICE, "*surface", 1, ATTN_NORM);
+					S_Sound(this, CHAN_VOICE, 0, "*surface", 1, ATTN_NORM);
 				}
 				// If we were running out of air, then ResetAirSupply() will play *gasp.
 			}
@@ -4675,9 +4704,9 @@ void AActor::CallBeginPlay()
 
 void AActor::PostBeginPlay ()
 {
-	SetDynamicLights();
 	PrevAngles = Angles;
 	flags7 |= MF7_HANDLENODELAY;
+	flags8 |= MF8_RECREATELIGHTS;
 }
 
 void AActor::CallPostBeginPlay()
@@ -4978,6 +5007,7 @@ AActor *P_SpawnPlayer (FPlayerStart *mthing, int playernum, int flags)
 
 	mobj = Spawn (p->cls, spawn, NO_REPLACE);
 
+	if (mobj == nullptr) return nullptr;
 	if (level.flags & LEVEL_USEPLAYERSTARTZ)
 	{
 		if (spawn.Z == ONFLOORZ)
@@ -5472,8 +5502,7 @@ AActor *P_SpawnMapThing (FMapThing *mthing, int position)
 	}
 
 	// [RH] Add ThingID to mobj and link it in with the others
-	mobj->tid = mthing->thingid;
-	mobj->AddToHash ();
+	mobj->SetTID(mthing->thingid);
 
 	mobj->PrevAngles.Yaw = mobj->Angles.Yaw = (double)mthing->angle;
 
@@ -5646,11 +5675,11 @@ AActor *P_SpawnPuff (AActor *source, PClassActor *pufftype, const DVector3 &pos1
 
 		if ((flags & PF_HITTHING) && puff->SeeSound)
 		{ // Hit thing sound
-			S_Sound (puff, CHAN_BODY, puff->SeeSound, 1, ATTN_NORM);
+			S_Sound (puff, CHAN_BODY, 0, puff->SeeSound, 1, ATTN_NORM);
 		}
 		else if (puff->AttackSound)
 		{
-			S_Sound (puff, CHAN_BODY, puff->AttackSound, 1, ATTN_NORM);
+			S_Sound (puff, CHAN_BODY, 0, puff->AttackSound, 1, ATTN_NORM);
 		}
 	}
 
@@ -5693,6 +5722,8 @@ void P_SpawnBlood (const DVector3 &pos1, DAngle dir, int damage, AActor *origina
 	if (bloodcls != NULL)
 	{
 		th = Spawn(bloodcls, pos, NO_REPLACE); // GetBloodType already performed the replacement
+
+		if (th == nullptr) return;
 		th->Vel.Z = 2;
 		th->Angles.Yaw = dir;
 		// [NG] Applying PUFFGETSOWNER to the blood will make it target the owner
@@ -5800,6 +5831,8 @@ void P_BloodSplatter (const DVector3 &pos, AActor *originator, DAngle hitangle)
 		AActor *mo;
 
 		mo = Spawn(bloodcls, pos, NO_REPLACE); // GetBloodType already performed the replacement
+
+		if (mo == nullptr) return;
 		mo->target = originator;
 		mo->Vel.X = pr_splatter.Random2 () / 64.;
 		mo->Vel.Y = pr_splatter.Random2() / 64.;
@@ -5844,6 +5877,8 @@ void P_BloodSplatter2 (const DVector3 &pos, AActor *originator, DAngle hitangle)
 
 
 		mo = Spawn (bloodcls, pos + add, NO_REPLACE); // GetBloodType already performed the replacement
+
+		if (mo == nullptr) return;
 		mo->target = originator;
 
 		// colorize the blood!
@@ -5898,6 +5933,8 @@ void P_RipperBlood (AActor *mo, AActor *bleeder)
 	{
 		AActor *th;
 		th = Spawn (bloodcls, pos, NO_REPLACE); // GetBloodType already performed the replacement
+
+		if (th == nullptr) return;
 		// [NG] Applying PUFFGETSOWNER to the blood will make it target the owner
 		if (th->flags5 & MF5_PUFFGETSOWNER) th->target = bleeder;
 		if (gameinfo.gametype == GAME_Heretic)
@@ -6020,6 +6057,13 @@ foundone:
 	if (splashnum == -1)
 		return Terrains[terrainnum].IsLiquid;
 
+	const bool dealDamageOnLand = thing->player
+		&& Terrains[terrainnum].DamageOnLand
+		&& Terrains[terrainnum].DamageAmount
+		&& (level.time & Terrains[terrainnum].DamageTimeMask);
+	if (dealDamageOnLand)
+		P_DamageMobj(thing, nullptr, nullptr, Terrains[terrainnum].DamageAmount, Terrains[terrainnum].DamageMOD);
+
 	// don't splash when touching an underwater floor
 	if (thing->waterlevel >= 1 && pos.Z <= thing->floorz) return Terrains[terrainnum].IsLiquid;
 
@@ -6048,6 +6092,8 @@ foundone:
 			if (splash->SplashChunk)
 			{
 				mo = Spawn(splash->SplashChunk, pos, ALLOW_REPLACE);
+
+				if (!mo) return false;
 				mo->target = thing;
 				if (splash->ChunkXVelShift != 255)
 				{
@@ -6070,13 +6116,13 @@ foundone:
 		}
 		if (mo)
 		{
-			S_Sound(mo, CHAN_ITEM, smallsplash ?
+			S_Sound(mo, CHAN_ITEM, 0, smallsplash ?
 				splash->SmallSplashSound : splash->NormalSplashSound,
 				1, ATTN_IDLE);
 		}
 		else
 		{
-			S_Sound(pos, CHAN_ITEM, smallsplash ?
+			S_Sound(pos, CHAN_ITEM, 0, smallsplash ?
 				splash->SmallSplashSound : splash->NormalSplashSound,
 				1, ATTN_IDLE);
 		}
@@ -6273,18 +6319,18 @@ void P_PlaySpawnSound(AActor *missile, AActor *spawner)
 	{
 		if (!(missile->flags & MF_SPAWNSOUNDSOURCE))
 		{
-			S_Sound (missile, CHAN_VOICE, missile->SeeSound, 1, ATTN_NORM);
+			S_Sound (missile, CHAN_VOICE, 0, missile->SeeSound, 1, ATTN_NORM);
 		}
 		else if (spawner != NULL)
 		{
-			S_Sound (spawner, CHAN_WEAPON, missile->SeeSound, 1, ATTN_NORM);
+			S_Sound (spawner, CHAN_WEAPON, 0, missile->SeeSound, 1, ATTN_NORM);
 		}
 		else
 		{
 			// If there is no spawner use the spawn position.
 			// But not in a silenced sector.
 			if (!(missile->Sector->Flags & SECF_SILENT))
-				S_Sound (missile->Pos(), CHAN_WEAPON, missile->SeeSound, 1, ATTN_NORM);
+				S_Sound (missile->Pos(), CHAN_WEAPON, 0, missile->SeeSound, 1, ATTN_NORM);
 		}
 	}
 }
@@ -6329,11 +6375,11 @@ AActor *P_SpawnMissileXYZ (DVector3 pos, AActor *source, AActor *dest, PClassAct
 		return nullptr;
 	}
 
-	if (dest == NULL)
+	if (dest == nullptr)
 	{
 		Printf ("P_SpawnMissilyXYZ: Tried to shoot %s from %s with no dest\n",
 			type->TypeName.GetChars(), source->GetClass()->TypeName.GetChars());
-		return NULL;
+		return nullptr;
 	}
 
 	if (pos.Z != ONFLOORZ && pos.Z != ONCEILINGZ)
@@ -6342,11 +6388,12 @@ AActor *P_SpawnMissileXYZ (DVector3 pos, AActor *source, AActor *dest, PClassAct
 	}
 
 	AActor *th = Spawn (type, pos, ALLOW_REPLACE);
-	
+
+	if (th == nullptr) return nullptr;
 	P_PlaySpawnSound(th, source);
 
 	// record missile's originator
-	if (owner == NULL) owner = source;
+	if (owner == nullptr) owner = source;
 	th->target = owner;
 
 	double speed = th->Speed;
@@ -6454,6 +6501,7 @@ AActor *P_OldSpawnMissile(AActor *source, AActor *owner, AActor *dest, PClassAct
 	}
 	AActor *th = Spawn (type, source->PosPlusZ(32.), ALLOW_REPLACE);
 
+	if (th == nullptr) return nullptr;
 	P_PlaySpawnSound(th, source);
 	th->target = owner;		// record missile's originator
 
@@ -6568,8 +6616,9 @@ AActor *P_SpawnMissileAngleZSpeed (AActor *source, double z,
 
 	mo = Spawn (type, source->PosAtZ(z), ALLOW_REPLACE);
 
+	if (mo == nullptr) return nullptr;
 	P_PlaySpawnSound(mo, source);
-	if (owner == NULL) owner = source;
+	if (owner == nullptr) owner = source;
 	mo->target = owner;
 	mo->Angles.Yaw = angle;
 	mo->VelFromAngle(speed);
@@ -6601,7 +6650,7 @@ AActor *P_SpawnSubMissile(AActor *source, PClassActor *type, AActor *target)
 {
 	AActor *other = Spawn(type, source->Pos(), ALLOW_REPLACE);
 
-	if (source == nullptr || type == nullptr)
+	if (other == nullptr || source == nullptr || type == nullptr)
 	{
 		return nullptr;
 	}
@@ -6715,6 +6764,8 @@ AActor *P_SpawnPlayerMissile (AActor *source, double x, double y, double z,
 	}
 	DVector3 pos = source->Vec2OffsetZ(x, y, z);
 	AActor *MissileActor = Spawn (type, pos, ALLOW_REPLACE);
+
+	if (MissileActor == nullptr) return nullptr;
 	if (pMissileActor) *pMissileActor = MissileActor;
 	P_PlaySpawnSound(MissileActor, source);
 	MissileActor->target = source;
@@ -7131,6 +7182,7 @@ void AActor::Revive()
 	flags5 = info->flags5;
 	flags6 = info->flags6;
 	flags7 = info->flags7;
+	flags8 = info->flags8; 
 	if (SpawnFlags & MTF_FRIENDLY) flags |= MF_FRIENDLY;
 	DamageType = info->DamageType;
 	health = SpawnHealth();
@@ -7404,6 +7456,6 @@ void PrintMiscActorInfo(AActor *query)
 		Printf("Target: %s\n", query->target ? query->target->GetClass()->TypeName.GetChars() : "-");
 		Printf("Last enemy: %s\n", query->lastenemy ? query->lastenemy->GetClass()->TypeName.GetChars() : "-");
 		auto sn = FState::StaticGetStateName(query->state);
-		Printf("State:%s, Tics: %d", sn.GetChars(), query->tics);
+		Printf("State:%s, Tics: %d\n", sn.GetChars(), query->tics);
 	}
 }

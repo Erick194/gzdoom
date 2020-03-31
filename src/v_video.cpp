@@ -71,6 +71,7 @@
 #include "vm.h"
 #include "r_videoscale.h"
 #include "i_time.h"
+#include "version.h"
 
 EXTERN_CVAR(Bool, cl_capfps)
 EXTERN_CVAR(Float, vid_brightness)
@@ -1172,8 +1173,6 @@ void V_Init (bool restart)
 	const char *i;
 	int width, height, bits;
 
-	atterm (V_Shutdown);
-
 	// [RH] Initialize palette management
 	InitPalette ();
 
@@ -1250,17 +1249,6 @@ void V_Init2()
 	C_NewModeAdjust();
 	M_InitVideoModesMenu();
 	setsizeneeded = true;
-}
-
-void V_Shutdown()
-{
-	if (screen)
-	{
-		DFrameBuffer *s = screen;
-		screen = NULL;
-		delete s;
-	}
-	V_ClearFonts();
 }
 
 CUSTOM_CVAR (Int, vid_aspect, 0, CVAR_GLOBALCONFIG|CVAR_ARCHIVE)
@@ -1402,35 +1390,14 @@ bool AspectTallerThanWide(float aspect)
 	return aspect < 1.333f;
 }
 
-void ScaleWithAspect (int &w, int &h, int Width, int Height)
-{
-	int resRatio = CheckRatio (Width, Height);
-	int screenRatio;
-	CheckRatio (w, h, &screenRatio);
-	if (resRatio == screenRatio)
-		return;
-
-	double yratio;
-	switch(resRatio)
-	{
-		case 0: yratio = 4./3.; break;
-		case 1: yratio = 16./9.; break;
-		case 2: yratio = 16./10.; break;
-		case 3: yratio = 17./10.; break;
-		case 4: yratio = 5./4.; break;
-		case 6: yratio = 21./9.; break;
-		default: return;
-	}
-	double y = w/yratio;
-	if (y > h)
-		w = static_cast<int>(h * yratio);
-	else
-		h = static_cast<int>(y);
-}
-
 void IVideo::DumpAdapters ()
 {
 	Printf("Multi-monitor support unavailable.\n");
+}
+
+CUSTOM_CVAR(Bool, vid_hdr, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
+{
+	Printf("This won't take effect until " GAMENAME " is restarted.\n");
 }
 
 CCMD(vid_listadapters)
@@ -1438,6 +1405,8 @@ CCMD(vid_listadapters)
 	if (Video != NULL)
 		Video->DumpAdapters();
 }
+
+bool vid_hdr_active = false;
 
 DEFINE_GLOBAL(SmallFont)
 DEFINE_GLOBAL(SmallFont2)

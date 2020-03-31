@@ -41,7 +41,7 @@
 
 #include "i_input.h"
 #include "d_event.h"
-#include "rawinput.h"
+
 
 // MACROS ------------------------------------------------------------------
 
@@ -424,15 +424,12 @@ FRawKeyboard::FRawKeyboard()
 
 FRawKeyboard::~FRawKeyboard()
 {
-	if (MyRegisterRawInputDevices != NULL)
-	{
-		RAWINPUTDEVICE rid;
-		rid.usUsagePage = HID_GENERIC_DESKTOP_PAGE;
-		rid.usUsage = HID_GDP_KEYBOARD;
-		rid.dwFlags = RIDEV_REMOVE;
-		rid.hwndTarget = NULL;
-		MyRegisterRawInputDevices(&rid, 1, sizeof(rid));
-	}
+	RAWINPUTDEVICE rid;
+	rid.usUsagePage = HID_GENERIC_DESKTOP_PAGE;
+	rid.usUsage = HID_GDP_KEYBOARD;
+	rid.dwFlags = RIDEV_REMOVE;
+	rid.hwndTarget = NULL;
+	RegisterRawInputDevices(&rid, 1, sizeof(rid));
 }
 
 //==========================================================================
@@ -447,15 +444,11 @@ bool FRawKeyboard::GetDevice()
 {
 	RAWINPUTDEVICE rid;
 
-	if (MyRegisterRawInputDevices == NULL)
-	{
-		return false;
-	}
 	rid.usUsagePage = HID_GENERIC_DESKTOP_PAGE;
 	rid.usUsage = HID_GDP_KEYBOARD;
 	rid.dwFlags = RIDEV_INPUTSINK;
 	rid.hwndTarget = Window;
-	if (!MyRegisterRawInputDevices(&rid, 1, sizeof(rid)))
+	if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
 	{
 		return false;
 	}
